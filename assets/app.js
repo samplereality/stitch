@@ -310,7 +310,7 @@ function createBlobUrl(file, overrideMime) {
 }
 
 function isRelativeUrl(url) {
-  return !/^(https?:|data:|blob:|#|mailto:|tel:|\\/\\/)/i.test(url);
+  return !/^(https?:|data:|blob:|#|mailto:|tel:|\/\/)/i.test(url);
 }
 
 function isAbsolutePath(url) {
