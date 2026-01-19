@@ -41,11 +41,19 @@ const state = {
   previewUrls: [],
   saveTimer: null,
   previewTimer: null,
+  statusTimer: null,
+  suppressEditorChange: false,
+  isResizing: false,
 };
 
 const elements = {
+  workspace: document.getElementById("workspace"),
   fileTree: document.getElementById("fileTree"),
   editor: document.getElementById("editor"),
+  editorPanel: document.querySelector(".editor-panel"),
+  previewPanel: document.querySelector(".preview-panel"),
+  filePanel: document.querySelector(".file-panel"),
+  splitter: document.getElementById("editorPreviewSplitter"),
   currentFileLabel: document.getElementById("currentFileLabel"),
   binaryNotice: document.getElementById("binaryNotice"),
   saveStatus: document.getElementById("saveStatus"),
@@ -60,7 +68,11 @@ const elements = {
   refreshPreviewBtn: document.getElementById("refreshPreviewBtn"),
   zipInput: document.getElementById("zipInput"),
   fileInput: document.getElementById("fileInput"),
+  toggleFilePanelBtn: document.getElementById("toggleFilePanelBtn"),
+  expandFilePanelBtn: document.getElementById("expandFilePanelBtn"),
 };
+
+let codeMirror = null;
 
 function normalizePath(path) {
   const normalized = path.replace(/\\/g, "/");
@@ -169,6 +181,38 @@ function setStatus(text, hold = 1200) {
   }
 }
 
+function getEditorValue() {
+  return codeMirror ? codeMirror.getValue() : elements.editor.value;
+}
+
+function setEditorValue(value) {
+  if (codeMirror) {
+    state.suppressEditorChange = true;
+    codeMirror.setValue(value);
+    state.suppressEditorChange = false;
+  } else {
+    elements.editor.value = value;
+  }
+}
+
+function setEditorReadOnly(isReadOnly) {
+  if (codeMirror) {
+    codeMirror.setOption("readOnly", isReadOnly ? "nocursor" : false);
+  } else {
+    elements.editor.disabled = isReadOnly;
+  }
+}
+
+function setEditorMode(path) {
+  if (!codeMirror) return;
+  const ext = extname(path);
+  let mode = "text/plain";
+  if (ext === "html" || ext === "htm") mode = "htmlmixed";
+  if (ext === "css") mode = "css";
+  if (ext === "js") mode = "javascript";
+  codeMirror.setOption("mode", mode);
+}
+
 function getFile(path) {
   return state.files.get(path) || null;
 }
@@ -181,7 +225,7 @@ function removeFile(path) {
   state.files.delete(path);
   if (state.currentPath === path) {
     state.currentPath = null;
-    elements.editor.value = "";
+    setEditorValue("");
     elements.currentFileLabel.textContent = "Select a file";
   }
 }
@@ -226,12 +270,13 @@ function openFile(path) {
 
   if (file.kind === "binary") {
     elements.binaryNotice.classList.remove("hidden");
-    elements.editor.value = "";
-    elements.editor.disabled = true;
+    setEditorValue("");
+    setEditorReadOnly(true);
   } else {
     elements.binaryNotice.classList.add("hidden");
-    elements.editor.disabled = false;
-    elements.editor.value = file.data;
+    setEditorReadOnly(false);
+    setEditorMode(path);
+    setEditorValue(file.data);
   }
 }
 
@@ -553,11 +598,20 @@ function resetProject() {
 }
 
 function setupEvents() {
-  elements.editor.addEventListener("input", () => {
-    updateCurrentFile(elements.editor.value);
-    queueSave();
-    queuePreview();
-  });
+  if (codeMirror) {
+    codeMirror.on("change", () => {
+      if (state.suppressEditorChange) return;
+      updateCurrentFile(getEditorValue());
+      queueSave();
+      queuePreview();
+    });
+  } else {
+    elements.editor.addEventListener("input", () => {
+      updateCurrentFile(elements.editor.value);
+      queueSave();
+      queuePreview();
+    });
+  }
 
   elements.newProjectBtn.addEventListener("click", resetProject);
   elements.importZipBtn.addEventListener("click", () => elements.zipInput.click());
@@ -571,6 +625,9 @@ function setupEvents() {
   });
   elements.uploadFileBtn.addEventListener("click", () => elements.fileInput.click());
   elements.refreshPreviewBtn.addEventListener("click", renderPreview);
+  elements.toggleFilePanelBtn.addEventListener("click", () => setFilePanelCollapsed(true));
+  elements.expandFilePanelBtn.addEventListener("click", () => setFilePanelCollapsed(false));
+  elements.splitter.addEventListener("mousedown", startResize);
 
   elements.zipInput.addEventListener("change", (event) => {
     const [file] = event.target.files || [];
@@ -585,5 +642,67 @@ function setupEvents() {
   });
 }
 
+function setFilePanelCollapsed(collapsed) {
+  elements.workspace.classList.toggle("file-collapsed", collapsed);
+  elements.expandFilePanelBtn.classList.toggle("hidden", !collapsed);
+  elements.toggleFilePanelBtn.title = collapsed ? "Show files" : "Collapse files";
+  elements.toggleFilePanelBtn.textContent = collapsed ? "⟩" : "⟨";
+  localStorage.setItem("stitch:file-panel-collapsed", collapsed ? "1" : "0");
+}
+
+function applyStoredLayout() {
+  const collapsed = localStorage.getItem("stitch:file-panel-collapsed") === "1";
+  setFilePanelCollapsed(collapsed);
+  const storedWidth = Number(localStorage.getItem("stitch:editor-width"));
+  if (storedWidth) {
+    elements.editorPanel.style.flexBasis = `${storedWidth}px`;
+  }
+}
+
+function startResize(event) {
+  if (event.button !== 0) return;
+  event.preventDefault();
+  state.isResizing = true;
+  document.body.classList.add("resizing");
+  const startX = event.clientX;
+  const startWidth = elements.editorPanel.getBoundingClientRect().width;
+  const fileWidth = elements.filePanel.getBoundingClientRect().width;
+
+  const onMove = (moveEvent) => {
+    if (!state.isResizing) return;
+    const delta = moveEvent.clientX - startX;
+    const workspaceWidth = elements.workspace.getBoundingClientRect().width;
+    const minWidth = 280;
+    const maxWidth = workspaceWidth - fileWidth - 320;
+    const nextWidth = Math.max(minWidth, Math.min(maxWidth, startWidth + delta));
+    elements.editorPanel.style.flexBasis = `${nextWidth}px`;
+  };
+
+  const onUp = () => {
+    state.isResizing = false;
+    document.body.classList.remove("resizing");
+    const finalWidth = elements.editorPanel.getBoundingClientRect().width;
+    localStorage.setItem("stitch:editor-width", Math.round(finalWidth).toString());
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup", onUp);
+  };
+
+  document.addEventListener("mousemove", onMove);
+  document.addEventListener("mouseup", onUp);
+}
+
+function initCodeMirror() {
+  if (!window.CodeMirror) return;
+  codeMirror = window.CodeMirror.fromTextArea(elements.editor, {
+    lineNumbers: true,
+    lineWrapping: false,
+    theme: "material-darker",
+    mode: "htmlmixed",
+  });
+  codeMirror.setSize("100%", "100%");
+}
+
+initCodeMirror();
+applyStoredLayout();
 setupEvents();
 loadInitialProject();

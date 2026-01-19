@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Glitch-lite Editor</title>
     <link rel="stylesheet" href="assets/styles.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/theme/material-darker.css"
+    />
   </head>
   <body>
     <div class="app">
@@ -24,17 +32,22 @@
         </div>
       </header>
 
-      <main class="workspace">
+      <main class="workspace" id="workspace">
         <aside class="panel file-panel">
           <div class="panel-header">
             <span>Files</span>
             <div class="panel-actions">
+              <button id="toggleFilePanelBtn" class="icon-btn" title="Collapse files">⟨</button>
               <button id="addFileBtn" class="icon-btn" title="Add file">+</button>
               <button id="uploadFileBtn" class="icon-btn" title="Upload files">⬆</button>
             </div>
           </div>
           <div id="fileTree" class="file-tree"></div>
         </aside>
+
+        <button id="expandFilePanelBtn" class="collapse-tab hidden" title="Show files">
+          Files ▸
+        </button>
 
         <section class="panel editor-panel">
           <div class="panel-header">
@@ -50,6 +63,8 @@
             </div>
           </div>
         </section>
+
+        <div class="splitter" id="editorPreviewSplitter" role="separator" aria-label="Resize editor"></div>
 
         <section class="panel preview-panel">
           <div class="panel-header">
@@ -73,6 +88,11 @@
     <input id="zipInput" type="file" accept=".zip" class="hidden" />
     <input id="fileInput" type="file" multiple class="hidden" />
 
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/xml/xml.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/javascript/javascript.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/css/css.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/htmlmixed/htmlmixed.js"></script>
     <script src="assets/app.js"></script>
   </body>
 </html>

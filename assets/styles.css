@@ -1,15 +1,15 @@
 :root {
   color-scheme: light;
-  --bg: #f4f1ec;
-  --bg-accent: #fef6e4;
-  --ink: #1f1d1a;
-  --muted: #5c5750;
-  --panel: #fffaf2;
-  --panel-edge: #e4d9c5;
-  --accent: #d65a31;
-  --accent-strong: #b23a1d;
-  --accent-soft: #f2c89b;
-  --shadow: 0 16px 40px rgba(31, 29, 26, 0.12);
+  --bg: #f8f7ff;
+  --bg-accent: #f2f7ff;
+  --ink: #1b1736;
+  --muted: #5b5875;
+  --panel: #ffffff;
+  --panel-edge: #e1deff;
+  --accent: #4b1cff;
+  --accent-strong: #3512c7;
+  --accent-soft: #e8e1ff;
+  --shadow: 0 18px 40px rgba(20, 16, 60, 0.12);
   --radius: 16px;
   --mono: "IBM Plex Mono", "JetBrains Mono", "SFMono-Regular", ui-monospace, monospace;
   --sans: "Space Grotesk", "Sora", "Trebuchet MS", sans-serif;
@@ -24,7 +24,8 @@ body {
   min-height: 100vh;
   font-family: var(--sans);
   color: var(--ink);
-  background: radial-gradient(circle at top left, #fff5dd 0%, #f6efe4 40%, #efe6d8 100%);
+  background: radial-gradient(circle at top left, #ffffff 0%, #f5f2ff 45%, #e8f5ff 100%);
+  background-attachment: fixed;
 }
 
 .app {
@@ -56,8 +57,8 @@ body {
   width: 42px;
   height: 42px;
   border-radius: 14px;
-  background: linear-gradient(135deg, #d65a31 0%, #f09a49 60%, #f5c16b 100%);
-  box-shadow: 0 8px 18px rgba(214, 90, 49, 0.35);
+  background: linear-gradient(135deg, #ff3ea5 0%, #7c4dff 55%, #4be0ff 100%);
+  box-shadow: 0 10px 24px rgba(124, 77, 255, 0.35);
 }
 
 .brand-text {
@@ -106,8 +107,8 @@ body {
 }
 
 .workspace {
-  display: grid;
-  grid-template-columns: 240px minmax(0, 1.2fr) minmax(0, 1fr);
+  position: relative;
+  display: flex;
   gap: 20px;
   align-items: stretch;
 }
@@ -145,6 +146,54 @@ body {
   border-radius: 10px;
   cursor: pointer;
   font-weight: 700;
+}
+
+.file-panel {
+  width: 240px;
+  flex: 0 0 240px;
+  min-width: 200px;
+}
+
+.editor-panel {
+  flex: 1 1 55%;
+  min-width: 320px;
+}
+
+.preview-panel {
+  flex: 1 1 45%;
+  min-width: 280px;
+}
+
+.splitter {
+  width: 10px;
+  border-radius: 999px;
+  background: rgba(75, 28, 255, 0.12);
+  cursor: col-resize;
+  align-self: stretch;
+  transition: background 0.2s ease;
+}
+
+.splitter:hover,
+.resizing .splitter {
+  background: rgba(75, 28, 255, 0.35);
+}
+
+.workspace.file-collapsed .file-panel {
+  display: none;
+}
+
+.collapse-tab {
+  position: absolute;
+  top: 12px;
+  left: 0;
+  transform: translateX(-50%);
+  background: #fff;
+  border: 1px solid var(--panel-edge);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 10px 22px rgba(20, 16, 60, 0.12);
 }
 
 .file-tree {
@@ -201,6 +250,21 @@ body {
   outline: none;
 }
 
+.CodeMirror {
+  flex: 1;
+  height: 100%;
+  font-family: var(--mono);
+  font-size: 14px;
+  border-radius: 0 0 var(--radius) var(--radius);
+  background: #1b1736;
+  color: #f6f5ff;
+}
+
+.CodeMirror-gutters {
+  background: #231f47;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .binary-notice {
   position: absolute;
   inset: 0;
@@ -242,11 +306,22 @@ body {
 
 @media (max-width: 1100px) {
   .workspace {
-    grid-template-columns: 1fr;
+    flex-direction: column;
   }
 
   .panel {
     min-height: 320px;
+  }
+
+  .file-panel,
+  .editor-panel,
+  .preview-panel {
+    width: 100%;
+    flex: 1 1 auto;
+  }
+
+  .splitter {
+    display: none;
   }
 
   .topbar {
