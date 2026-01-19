@@ -110,6 +110,9 @@
               <button id="redoBtn" class="icon-btn" title="Redo last change">
                 <i data-lucide="redo-2"></i>
               </button>
+              <button id="wrapToggleBtn" class="icon-btn" title="Toggle line wrap">
+                <i data-lucide="wrap-text"></i>
+              </button>
               <button id="prettifyBtn" class="icon-btn" title="Format current file">
                 <i data-lucide="wand-2"></i>
               </button>
@@ -152,21 +155,23 @@
     <input id="zipInput" type="file" accept=".zip" class="hidden" />
     <input id="fileInput" type="file" multiple class="hidden" />
 
-    <div id="projectMetaModal" class="modal hidden" role="dialog" aria-label="Project details">
-      <div class="modal-backdrop"></div>
-      <div class="modal-panel">
-        <div class="modal-header">
-          <span>Project details</span>
-          <button id="closeProjectMetaBtn" class="icon-btn" title="Close">
-            <i data-lucide="x"></i>
-          </button>
-        </div>
-        <div class="modal-body">
-          <label class="modal-label" for="projectCreatorInput">Creator name</label>
-          <input id="projectCreatorInput" class="modal-input" type="text" placeholder="Your name" />
-          <label class="modal-label" for="projectDescriptionInput">Project description</label>
-          <textarea id="projectDescriptionInput" class="modal-textarea" placeholder="Short description"></textarea>
-        </div>
+        <div id="projectMetaModal" class="modal hidden" role="dialog" aria-label="Project details">
+          <div class="modal-backdrop"></div>
+          <div class="modal-panel">
+            <div class="modal-header">
+              <span>Project details</span>
+              <button id="closeProjectMetaBtn" class="icon-btn" title="Close">
+                <i data-lucide="x"></i>
+              </button>
+            </div>
+            <div class="modal-body">
+              <label class="modal-label" for="projectTitleInput">Project name</label>
+              <input id="projectTitleInput" class="modal-input" type="text" placeholder="Project name" />
+              <label class="modal-label" for="projectCreatorInput">Creator name</label>
+              <input id="projectCreatorInput" class="modal-input" type="text" placeholder="Your name" />
+              <label class="modal-label" for="projectDescriptionInput">Project description</label>
+              <textarea id="projectDescriptionInput" class="modal-textarea" placeholder="Short description"></textarea>
+            </div>
         <div class="modal-actions">
           <button id="saveProjectMetaBtn" class="btn">Save</button>
         </div>

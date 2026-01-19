@@ -361,6 +361,11 @@ body {
   stroke-width: 2;
 }
 
+.icon-btn.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(75, 28, 255, 0.18);
+}
+
 
 .file-panel {
   width: 240px;

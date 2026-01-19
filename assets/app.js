@@ -4,6 +4,7 @@ const DEFAULT_PROJECT_ID = "default";
 const PUBLISH_ENDPOINT = "https://glitchlet.digitaldavidson.net/publish/publish.php";
 const THEME_STORAGE_KEY = "stitch:theme";
 const EDITOR_THEME_KEY = "stitch:editor-theme";
+const LINE_WRAP_KEY = "stitch:line-wrap";
 const CURRENT_PROJECT_KEY = "stitch:current-project";
 const DEFAULT_PROJECT_NAME = "Untitled Project";
 const TEXT_EXTS = new Set([
@@ -75,6 +76,7 @@ const elements = {
   publishBtn: document.getElementById("publishBtn"),
   themeToggleBtn: document.getElementById("themeToggleBtn"),
   editorThemeToggleBtn: document.getElementById("editorThemeToggleBtn"),
+  wrapToggleBtn: document.getElementById("wrapToggleBtn"),
   prettifyBtn: document.getElementById("prettifyBtn"),
   undoBtn: document.getElementById("undoBtn"),
   redoBtn: document.getElementById("redoBtn"),
@@ -83,6 +85,7 @@ const elements = {
   projectMetaModal: document.getElementById("projectMetaModal"),
   closeProjectMetaBtn: document.getElementById("closeProjectMetaBtn"),
   saveProjectMetaBtn: document.getElementById("saveProjectMetaBtn"),
+  projectTitleInput: document.getElementById("projectTitleInput"),
   projectCreatorInput: document.getElementById("projectCreatorInput"),
   projectDescriptionInput: document.getElementById("projectDescriptionInput"),
   publishModal: document.getElementById("publishModal"),
@@ -108,6 +111,7 @@ const elements = {
 };
 
 let codeMirror = null;
+let lineWrappingEnabled = false;
 
 function refreshIcons() {
   if (window.lucide && typeof window.lucide.createIcons === "function") {
@@ -979,13 +983,14 @@ function setupEvents() {
   elements.publishBtn.addEventListener("click", publishProject);
   elements.themeToggleBtn.addEventListener("click", toggleTheme);
   elements.editorThemeToggleBtn.addEventListener("click", toggleEditorTheme);
+  elements.wrapToggleBtn.addEventListener("click", toggleLineWrap);
   elements.prettifyBtn.addEventListener("click", prettifyCurrentFile);
   elements.projectMetaBtn.addEventListener("click", openProjectMetaModal);
-  elements.closeProjectMetaBtn.addEventListener("click", closeProjectMetaModal);
+  elements.closeProjectMetaBtn.addEventListener("click", saveProjectMeta);
   elements.saveProjectMetaBtn.addEventListener("click", saveProjectMeta);
   elements.projectMetaModal.addEventListener("click", (event) => {
     if (event.target.classList.contains("modal-backdrop")) {
-      closeProjectMetaModal();
+      saveProjectMeta();
     }
   });
   elements.closePublishModalBtn.addEventListener("click", closePublishModal);
@@ -1112,6 +1117,9 @@ function updateProjectManagerFields() {
   if (elements.currentProjectName) {
     elements.currentProjectName.textContent = state.projectName;
   }
+  if (elements.projectTitleInput) {
+    elements.projectTitleInput.value = state.projectName;
+  }
   if (elements.projectCreatorInput) {
     elements.projectCreatorInput.value = state.projectCreator;
   }
@@ -1129,12 +1137,24 @@ function closeProjectMetaModal() {
   elements.projectMetaModal.classList.add("hidden");
 }
 
-async function saveProjectMeta() {
-  state.projectCreator = String(elements.projectCreatorInput.value || "").trim();
-  state.projectDescription = String(elements.projectDescriptionInput.value || "").trim();
-  closeProjectMetaModal();
+async function commitProjectMeta() {
+  const nextName = normalizeProjectName(elements.projectTitleInput.value);
+  const nextCreator = String(elements.projectCreatorInput.value || "").trim();
+  const nextDescription = String(elements.projectDescriptionInput.value || "").trim();
+  const changed = nextName !== state.projectName ||
+    nextCreator !== state.projectCreator ||
+    nextDescription !== state.projectDescription;
+  if (!changed) return;
+  state.projectName = nextName;
+  state.projectCreator = nextCreator;
+  state.projectDescription = nextDescription;
   await dbSet(state.projectId, serializeProject());
   renderProjectManager();
+}
+
+async function saveProjectMeta() {
+  await commitProjectMeta();
+  closeProjectMetaModal();
 }
 
 function openPublishModal(url) {
@@ -1348,15 +1368,34 @@ function initCodeMirror() {
   if (!window.CodeMirror) return;
   codeMirror = window.CodeMirror.fromTextArea(elements.editor, {
     lineNumbers: true,
-    lineWrapping: false,
+    lineWrapping: lineWrappingEnabled,
     theme: "material-darker",
     mode: "htmlmixed",
   });
   codeMirror.setSize("100%", "100%");
 }
 
+function applyLineWrapSetting() {
+  if (codeMirror) {
+    codeMirror.setOption("lineWrapping", lineWrappingEnabled);
+  } else {
+    elements.editor.wrap = lineWrappingEnabled ? "soft" : "off";
+  }
+  const label = lineWrappingEnabled ? "Line wrap: On" : "Line wrap: Off";
+  elements.wrapToggleBtn.title = `${label} (toggle)`;
+  elements.wrapToggleBtn.classList.toggle("is-active", lineWrappingEnabled);
+}
+
+function toggleLineWrap() {
+  lineWrappingEnabled = !lineWrappingEnabled;
+  localStorage.setItem(LINE_WRAP_KEY, lineWrappingEnabled ? "1" : "0");
+  applyLineWrapSetting();
+}
+
+lineWrappingEnabled = localStorage.getItem(LINE_WRAP_KEY) === "1";
 initCodeMirror();
 refreshIcons();
+applyLineWrapSetting();
 applyStoredTheme();
 applyEditorTheme(localStorage.getItem(EDITOR_THEME_KEY));
 applyStoredLayout();
