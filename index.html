@@ -26,16 +26,25 @@
         </div>
         <div class="current-project">
           <span class="current-project-label">Project</span>
-          <span id="currentProjectName" class="current-project-name">Untitled Project</span>
+          <div class="current-project-row">
+            <span id="currentProjectName" class="current-project-name">Untitled Project</span>
+            <button id="projectMetaBtn" class="meta-btn" title="Edit project details">
+              <i data-lucide="pencil"></i>
+            </button>
+          </div>
         </div>
         <div class="actions">
-          <button id="themeToggleBtn" class="btn" title="Switch theme mode">Theme: Auto</button>
+          <button id="themeToggleBtn" class="icon-btn" title="Switch theme mode">
+            <i data-lucide="sun-moon"></i>
+          </button>
           <div class="project-manager">
             <button id="projectManagerBtn" class="btn" title="Open project manager">Projects</button>
             <div id="projectManagerPanel" class="manager-panel hidden" role="dialog" aria-label="Project manager">
               <div class="manager-header">
                 <span>Project Manager</span>
-                <button id="closeProjectManagerBtn" class="icon-btn" title="Close">×</button>
+                <button id="closeProjectManagerBtn" class="icon-btn" title="Close">
+                  <i data-lucide="x"></i>
+                </button>
               </div>
               <div class="manager-section">
                 <label class="manager-label" for="projectNameInput">Current project name</label>
@@ -71,17 +80,19 @@
           <div class="panel-header">
             <span>Files</span>
             <div class="panel-actions">
-              <button id="toggleFilePanelBtn" class="icon-btn" title="Collapse files">⟨</button>
-              <button id="addFileBtn" class="icon-btn" title="Add file">+</button>
-              <button id="uploadFileBtn" class="icon-btn" title="Upload files">⬆</button>
+              <button id="toggleFilePanelBtn" class="icon-btn" title="Collapse files">
+                <i data-lucide="chevrons-left"></i>
+              </button>
+              <button id="addFileBtn" class="icon-btn" title="Add file">
+                <i data-lucide="file-plus"></i>
+              </button>
+              <button id="uploadFileBtn" class="icon-btn" title="Upload files">
+                <i data-lucide="upload"></i>
+              </button>
             </div>
           </div>
           <div id="fileTree" class="file-tree"></div>
         </aside>
-
-        <button id="expandFilePanelBtn" class="collapse-tab hidden" title="Show files">
-          Files ▸
-        </button>
 
         <section class="panel editor-panel">
           <div class="panel-header">
@@ -90,11 +101,20 @@
               <span id="saveStatus" class="status"></span>
             </div>
             <div class="panel-actions">
-              <button id="undoBtn" class="mode-btn" title="Undo last change">Undo</button>
-              <button id="redoBtn" class="mode-btn" title="Redo last change">Redo</button>
-              <button id="prettifyBtn" class="mode-btn" title="Format current file">Prettify</button>
-              <button id="editorThemeToggleBtn" class="mode-btn" title="Toggle editor theme">
-                Editor: Dark
+              <button id="expandFilePanelBtn" class="icon-btn hidden" title="Show files">
+                <i data-lucide="folder-open"></i>
+              </button>
+              <button id="undoBtn" class="icon-btn" title="Undo last change">
+                <i data-lucide="undo-2"></i>
+              </button>
+              <button id="redoBtn" class="icon-btn" title="Redo last change">
+                <i data-lucide="redo-2"></i>
+              </button>
+              <button id="prettifyBtn" class="icon-btn" title="Format current file">
+                <i data-lucide="wand-2"></i>
+              </button>
+              <button id="editorThemeToggleBtn" class="icon-btn" title="Toggle editor theme">
+                <i data-lucide="moon-star"></i>
               </button>
             </div>
           </div>
@@ -112,7 +132,9 @@
           <div class="panel-header">
             <span>Preview</span>
             <div class="panel-actions">
-              <button id="refreshPreviewBtn" class="icon-btn" title="Refresh preview">⟳</button>
+              <button id="refreshPreviewBtn" class="icon-btn" title="Refresh preview">
+                <i data-lucide="refresh-cw"></i>
+              </button>
             </div>
           </div>
           <div class="preview-wrap">
@@ -130,6 +152,47 @@
     <input id="zipInput" type="file" accept=".zip" class="hidden" />
     <input id="fileInput" type="file" multiple class="hidden" />
 
+    <div id="projectMetaModal" class="modal hidden" role="dialog" aria-label="Project details">
+      <div class="modal-backdrop"></div>
+      <div class="modal-panel">
+        <div class="modal-header">
+          <span>Project details</span>
+          <button id="closeProjectMetaBtn" class="icon-btn" title="Close">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <label class="modal-label" for="projectCreatorInput">Creator name</label>
+          <input id="projectCreatorInput" class="modal-input" type="text" placeholder="Your name" />
+          <label class="modal-label" for="projectDescriptionInput">Project description</label>
+          <textarea id="projectDescriptionInput" class="modal-textarea" placeholder="Short description"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button id="saveProjectMetaBtn" class="btn">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="publishModal" class="modal hidden" role="dialog" aria-label="Publish complete">
+      <div class="modal-backdrop"></div>
+      <div class="modal-panel">
+        <div class="modal-header">
+          <span>Published</span>
+          <button id="closePublishModalBtn" class="icon-btn" title="Close">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-text">Your project is live at:</p>
+          <div class="modal-url" id="publishUrlText"></div>
+        </div>
+        <div class="modal-actions">
+          <button id="copyPublishUrlBtn" class="btn">Copy URL</button>
+          <button id="openPublishUrlBtn" class="btn btn-primary">Open</button>
+        </div>
+      </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/xml/xml.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/javascript/javascript.js"></script>
@@ -140,6 +203,7 @@
     <script src="https://unpkg.com/prettier@3.8.0/plugins/estree.js"></script>
     <script src="https://unpkg.com/prettier@3.8.0/plugins/html.js"></script>
     <script src="https://unpkg.com/prettier@3.8.0/plugins/postcss.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
     <script src="assets/app.js"></script>
   </body>
 </html>

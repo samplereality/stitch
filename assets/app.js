@@ -42,6 +42,8 @@ const MIME_BY_EXT = {
 const state = {
   projectId: DEFAULT_PROJECT_ID,
   projectName: DEFAULT_PROJECT_NAME,
+  projectDescription: "",
+  projectCreator: "",
   files: new Map(),
   editorDocs: new Map(),
   binaryDoc: null,
@@ -77,6 +79,17 @@ const elements = {
   undoBtn: document.getElementById("undoBtn"),
   redoBtn: document.getElementById("redoBtn"),
   currentProjectName: document.getElementById("currentProjectName"),
+  projectMetaBtn: document.getElementById("projectMetaBtn"),
+  projectMetaModal: document.getElementById("projectMetaModal"),
+  closeProjectMetaBtn: document.getElementById("closeProjectMetaBtn"),
+  saveProjectMetaBtn: document.getElementById("saveProjectMetaBtn"),
+  projectCreatorInput: document.getElementById("projectCreatorInput"),
+  projectDescriptionInput: document.getElementById("projectDescriptionInput"),
+  publishModal: document.getElementById("publishModal"),
+  closePublishModalBtn: document.getElementById("closePublishModalBtn"),
+  publishUrlText: document.getElementById("publishUrlText"),
+  copyPublishUrlBtn: document.getElementById("copyPublishUrlBtn"),
+  openPublishUrlBtn: document.getElementById("openPublishUrlBtn"),
   projectManagerBtn: document.getElementById("projectManagerBtn"),
   projectManagerPanel: document.getElementById("projectManagerPanel"),
   closeProjectManagerBtn: document.getElementById("closeProjectManagerBtn"),
@@ -96,6 +109,12 @@ const elements = {
 
 let codeMirror = null;
 
+function refreshIcons() {
+  if (window.lucide && typeof window.lucide.createIcons === "function") {
+    window.lucide.createIcons();
+  }
+}
+
 function normalizePath(path) {
   const normalized = path.replace(/\\/g, "/");
   const parts = [];
@@ -108,6 +127,10 @@ function normalizePath(path) {
     parts.push(part);
   }
   return parts.join("/");
+}
+
+function isHiddenPath(path) {
+  return path.split("/").some((segment) => segment && segment.startsWith("."));
 }
 
 function dirname(path) {
@@ -292,6 +315,36 @@ function setFile(file) {
   state.files.set(file.path, file);
 }
 
+function renameFile(oldPath, newPath) {
+  const normalized = normalizePath(newPath);
+  if (!normalized) {
+    alert("Please enter a valid file name.");
+    return false;
+  }
+  if (normalized === oldPath) return false;
+  if (state.files.has(normalized)) {
+    alert("A file with that name already exists.");
+    return false;
+  }
+  const file = getFile(oldPath);
+  if (!file) return false;
+  state.files.delete(oldPath);
+  file.path = normalized;
+  file.mime = fileMime(normalized);
+  state.files.set(normalized, file);
+  const doc = state.editorDocs.get(oldPath);
+  if (doc) {
+    state.editorDocs.delete(oldPath);
+    state.editorDocs.set(normalized, doc);
+  }
+  if (state.currentPath === oldPath) {
+    state.currentPath = normalized;
+    elements.currentFileLabel.textContent = normalized;
+    setEditorMode(normalized);
+  }
+  return true;
+}
+
 function removeFile(path) {
   state.files.delete(path);
   state.editorDocs.delete(path);
@@ -313,9 +366,27 @@ function renderFileTree() {
     const label = document.createElement("span");
     label.textContent = path;
 
+    const actions = document.createElement("div");
+    actions.className = "file-item-actions";
+
+    const renameBtn = document.createElement("button");
+    renameBtn.className = "icon-btn";
+    renameBtn.innerHTML = "<i data-lucide=\"pencil\"></i>";
+    renameBtn.title = "Rename file";
+    renameBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const next = prompt("Rename file:", path);
+      if (!next) return;
+      if (renameFile(path, next)) {
+        renderFileTree();
+        queueSave();
+        queuePreview();
+      }
+    });
+
     const removeBtn = document.createElement("button");
     removeBtn.className = "icon-btn";
-    removeBtn.textContent = "×";
+    removeBtn.innerHTML = "<i data-lucide=\"trash-2\"></i>";
     removeBtn.title = "Delete file";
     removeBtn.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -327,10 +398,12 @@ function renderFileTree() {
       }
     });
 
-    item.append(label, removeBtn);
+    actions.append(renameBtn, removeBtn);
+    item.append(label, actions);
     item.addEventListener("click", () => openFile(path));
     elements.fileTree.appendChild(item);
   }
+  refreshIcons();
 }
 
 function openFile(path) {
@@ -445,6 +518,8 @@ function serializeProject() {
   return {
     id: state.projectId,
     name: state.projectName,
+    description: state.projectDescription,
+    creator: state.projectCreator,
     updatedAt: Date.now(),
     files,
   };
@@ -454,6 +529,8 @@ function loadProject(project) {
   state.files = new Map();
   state.editorDocs = new Map();
   state.projectName = normalizeProjectName(project?.name);
+  state.projectDescription = String(project?.description || "");
+  state.projectCreator = String(project?.creator || "");
   for (const file of project.files) {
     let data = file.data;
     if (file.kind === "binary") {
@@ -685,11 +762,31 @@ async function importZip(file) {
     const JSZip = await ensureJSZip();
     const zip = await JSZip.loadAsync(file);
     state.files = new Map();
+    state.editorDocs = new Map();
     const entries = Object.keys(zip.files);
+    const fileEntries = [];
     for (const path of entries) {
       const entry = zip.files[path];
       if (entry.dir) continue;
       const normalized = normalizePath(path);
+      if (!normalized || isHiddenPath(normalized)) {
+        continue;
+      }
+      fileEntries.push({ entry, path: normalized });
+    }
+    const topLevelFolders = new Set(
+      fileEntries.map(({ path }) => path.split("/")[0]).filter(Boolean)
+    );
+    const hasSingleRoot = topLevelFolders.size === 1 &&
+      fileEntries.every(({ path }) => path.includes("/"));
+    const rootPrefix = hasSingleRoot ? `${Array.from(topLevelFolders)[0]}/` : "";
+
+    for (const item of fileEntries) {
+      const entry = item.entry;
+      const normalized = rootPrefix ? item.path.replace(rootPrefix, "") : item.path;
+      if (!normalized || isHiddenPath(normalized)) {
+        continue;
+      }
       const kind = isTextFile(normalized) ? "text" : "binary";
       if (kind === "text") {
         const content = await entry.async("string");
@@ -741,23 +838,32 @@ async function exportZip() {
 
 async function publishProject() {
   try {
+    const hasMeta = await ensurePublishMetadata();
+    if (!hasMeta) return;
     setStatus("Publishing...", 0);
     const blob = await buildZipBlob();
     const form = new FormData();
     form.append("zip", blob, `project-${Date.now()}.zip`);
     form.append("name", state.projectName);
+    form.append("creator", state.projectCreator);
+    form.append("description", state.projectDescription);
     const response = await fetch(PUBLISH_ENDPOINT, {
       method: "POST",
       body: form,
     });
+    const raw = await response.text();
     if (!response.ok) {
-      const text = await response.text();
-      throw new Error(text || `Publish failed (${response.status})`);
+      throw new Error(raw || `Publish failed (${response.status})`);
     }
-    const data = await response.json();
+    let data = null;
+    try {
+      data = raw ? JSON.parse(raw) : null;
+    } catch (error) {
+      throw new Error(`Publish failed: ${raw.slice(0, 300)}`);
+    }
     if (data?.url) {
       setStatus("Published");
-      alert(`Published! View it at:\n${data.url}`);
+      openPublishModal(data.url);
     } else {
       setStatus("Published");
       alert("Published! Check the projects directory for your site.");
@@ -774,6 +880,8 @@ async function resetProject() {
   const name = prompt("Name your project:", DEFAULT_PROJECT_NAME);
   state.projectId = createProjectId();
   state.projectName = normalizeProjectName(name);
+  state.projectDescription = "";
+  state.projectCreator = "";
   localStorage.setItem(CURRENT_PROJECT_KEY, state.projectId);
   state.files = new Map();
   state.editorDocs = new Map();
@@ -797,9 +905,7 @@ function updateThemeToggleLabel(theme) {
   const mode = theme || "auto";
   const order = ["auto", "light", "dark"];
   const nextMode = order[(order.indexOf(mode) + 1) % order.length];
-  const label = `Theme: ${mode[0].toUpperCase()}${mode.slice(1)}`;
-  elements.themeToggleBtn.textContent = label;
-  elements.themeToggleBtn.title = `Switch to ${nextMode} mode`;
+  elements.themeToggleBtn.title = `Theme: ${mode[0].toUpperCase()}${mode.slice(1)} (switch to ${nextMode})`;
 }
 
 function applyTheme(theme) {
@@ -828,9 +934,10 @@ function updateEditorThemeToggleLabel(theme) {
   if (!elements.editorThemeToggleBtn) return;
   const resolved = resolveEditorTheme(theme);
   const next = resolved === "dark" ? "light" : "dark";
-  const label = `Editor: ${resolved === "dark" ? "Dark" : "Light"}`;
-  elements.editorThemeToggleBtn.textContent = label;
-  elements.editorThemeToggleBtn.title = `Switch editor to ${next} mode`;
+  const icon = resolved === "dark" ? "moon-star" : "sun";
+  elements.editorThemeToggleBtn.innerHTML = `<i data-lucide="${icon}"></i>`;
+  elements.editorThemeToggleBtn.title = `Editor: ${resolved} (switch to ${next})`;
+  refreshIcons();
 }
 
 function applyEditorTheme(theme) {
@@ -873,6 +980,37 @@ function setupEvents() {
   elements.themeToggleBtn.addEventListener("click", toggleTheme);
   elements.editorThemeToggleBtn.addEventListener("click", toggleEditorTheme);
   elements.prettifyBtn.addEventListener("click", prettifyCurrentFile);
+  elements.projectMetaBtn.addEventListener("click", openProjectMetaModal);
+  elements.closeProjectMetaBtn.addEventListener("click", closeProjectMetaModal);
+  elements.saveProjectMetaBtn.addEventListener("click", saveProjectMeta);
+  elements.projectMetaModal.addEventListener("click", (event) => {
+    if (event.target.classList.contains("modal-backdrop")) {
+      closeProjectMetaModal();
+    }
+  });
+  elements.closePublishModalBtn.addEventListener("click", closePublishModal);
+  elements.publishModal.addEventListener("click", (event) => {
+    if (event.target.classList.contains("modal-backdrop")) {
+      closePublishModal();
+    }
+  });
+  elements.copyPublishUrlBtn.addEventListener("click", async () => {
+    const url = elements.publishUrlText.textContent.trim();
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setStatus("Copied");
+    } catch (error) {
+      console.error(error);
+      alert("Copy failed. You can manually copy the URL.");
+    }
+  });
+  elements.openPublishUrlBtn.addEventListener("click", () => {
+    const url = elements.openPublishUrlBtn.dataset.url;
+    if (url) {
+      window.open(url, "_blank", "noopener");
+    }
+  });
   elements.undoBtn.addEventListener("click", () => {
     if (codeMirror) {
       codeMirror.undo();
@@ -936,7 +1074,9 @@ function setFilePanelCollapsed(collapsed) {
   elements.workspace.classList.toggle("file-collapsed", collapsed);
   elements.expandFilePanelBtn.classList.toggle("hidden", !collapsed);
   elements.toggleFilePanelBtn.title = collapsed ? "Show files" : "Collapse files";
-  elements.toggleFilePanelBtn.textContent = collapsed ? "⟩" : "⟨";
+  const icon = collapsed ? "chevrons-right" : "chevrons-left";
+  elements.toggleFilePanelBtn.innerHTML = `<i data-lucide="${icon}"></i>`;
+  refreshIcons();
   localStorage.setItem("stitch:file-panel-collapsed", collapsed ? "1" : "0");
 }
 
@@ -972,6 +1112,54 @@ function updateProjectManagerFields() {
   if (elements.currentProjectName) {
     elements.currentProjectName.textContent = state.projectName;
   }
+  if (elements.projectCreatorInput) {
+    elements.projectCreatorInput.value = state.projectCreator;
+  }
+  if (elements.projectDescriptionInput) {
+    elements.projectDescriptionInput.value = state.projectDescription;
+  }
+}
+
+function openProjectMetaModal() {
+  updateProjectManagerFields();
+  elements.projectMetaModal.classList.remove("hidden");
+}
+
+function closeProjectMetaModal() {
+  elements.projectMetaModal.classList.add("hidden");
+}
+
+async function saveProjectMeta() {
+  state.projectCreator = String(elements.projectCreatorInput.value || "").trim();
+  state.projectDescription = String(elements.projectDescriptionInput.value || "").trim();
+  closeProjectMetaModal();
+  await dbSet(state.projectId, serializeProject());
+  renderProjectManager();
+}
+
+function openPublishModal(url) {
+  elements.publishUrlText.textContent = url;
+  elements.openPublishUrlBtn.dataset.url = url;
+  elements.publishModal.classList.remove("hidden");
+}
+
+function closePublishModal() {
+  elements.publishModal.classList.add("hidden");
+}
+
+async function ensurePublishMetadata() {
+  if (state.projectCreator && state.projectDescription) {
+    return true;
+  }
+  const creator = state.projectCreator || prompt("Creator name:", state.projectCreator);
+  if (creator === null) return false;
+  const description = state.projectDescription || prompt("Project description:", state.projectDescription);
+  if (description === null) return false;
+  state.projectCreator = String(creator || "").trim();
+  state.projectDescription = String(description || "").trim();
+  await dbSet(state.projectId, serializeProject());
+  renderProjectManager();
+  return true;
 }
 
 async function renderProjectManager() {
@@ -1168,6 +1356,7 @@ function initCodeMirror() {
 }
 
 initCodeMirror();
+refreshIcons();
 applyStoredTheme();
 applyEditorTheme(localStorage.getItem(EDITOR_THEME_KEY));
 applyStoredLayout();
