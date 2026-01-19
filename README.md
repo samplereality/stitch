@@ -1,6 +1,6 @@
-# Stitch
+# Glitchlet
 
-Stitch is a lightweight, browser-based creative-coding environment (HTML/CSS/JS only). Think "Glitch-lite" for shared hosting: students edit multi-file projects in the browser with instant preview, save locally via IndexedDB, and later publish to a class projects subdomain.
+Glitchlet is a lightweight, browser-based creative-coding environment (HTML/CSS/JS only). Think "Glitch-lite" for shared hosting: students edit multi-file projects in the browser with instant preview, save locally via IndexedDB, and later publish to a class projects folder.
 
 ## Highlights
 
@@ -11,7 +11,7 @@ Stitch is a lightweight, browser-based creative-coding environment (HTML/CSS/JS 
 
 ## Status
 
-Frontend editor scaffold is in place. Server-side publishing (PHP) is planned next.
+Frontend editor scaffold is in place. Server-side publishing (through a PHP-endpoint) also works.
 
 ## Getting started
 
