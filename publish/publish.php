@@ -23,6 +23,7 @@ const PROJECTS_ADMIN_PHP = "admin.php";
 const ADMIN_USER = "admin";
 const ADMIN_PASSWORD_HASH = '$2y$10$XhgH5ocb7EK3e48H3stI8eHiQjarNIVYMKNeOOGkCUYJdu2aWKvl6';
 const AUTH_STORE_PATH = __DIR__ . "/../private/project_auth.json";
+const APP_URL = "https://glitchlet.digitaldavidson.net/";
 
 $adjectives = [
     "brave", "silent", "cosmic", "sunny", "misty", "electric", "gentle", "swift", "bright", "hidden",
@@ -241,7 +242,8 @@ function writeIndex(string $jsonPath, string $htmlPath, array $projects): void {
 
 function buildIndexHtml(array $projects): string {
     $cards = "";
-    $adminButton = "<a class=\"admin-btn\" href=\"" . PROJECT_URL_BASE . "admin.php\">Admin</a>";
+    $adminButton = "<a class=\"admin-btn\" href=\"" . PROJECT_URL_BASE . "admin.php\">Admin</a>"
+        . "<a class=\"admin-btn outline\" href=\"" . APP_URL . "\">Back to App</a>";
   foreach ($projects as $project) {
     if (!empty($project["archived"])) {
       continue;
@@ -275,6 +277,7 @@ function buildIndexHtml(array $projects): string {
         . "h1{margin:0 0 20px;font-size:28px;display:flex;align-items:center;gap:12px;}"
         . ".admin-btn{font-size:12px;text-decoration:none;color:#fff;background:#3b2d72;"
         . "padding:6px 10px;border-radius:999px;}"
+        . ".admin-btn.outline{background:#fff;color:#3b2d72;border:1px solid #3b2d72;}"
         . ".grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));}"
         . ".card{background:#fff;border-radius:16px;padding:16px;box-shadow:0 12px 24px rgba(0,0,0,0.08);}"
         . ".card h2{margin:0 0 6px;font-size:18px;}"
@@ -327,16 +330,21 @@ function generateSlug(array $adjectives, array $nouns, string $projectsRoot): st
 
 function injectRemixFab(string $projectDir): void {
   $snippet = "\n<!-- remix-fab -->\n"
+      . "<a href=\"" . PROJECT_URL_BASE . "\" class=\"nav-fab\" data-projects-fab>Projects</a>\n"
+      . "<a href=\"" . APP_URL . "\" class=\"nav-fab\" data-app-fab>App</a>\n"
       . "<a href=\"admin.php\" class=\"admin-fab\" data-admin-fab>Admin</a>\n"
       . "<a href=\"" . REMIX_ZIP_NAME . "\" class=\"remix-fab\" data-remix-fab download>Remix</a>\n"
       . "<style>\n"
-      . ".remix-fab,.admin-fab{position:fixed;right:20px;z-index:9999;"
+      . ".remix-fab,.admin-fab,.nav-fab{position:fixed;right:20px;z-index:9999;"
       . "padding:12px 16px;border-radius:999px;color:#fff;"
       . "font:600 14px/1.1 Arial,sans-serif;text-decoration:none;"
       . "box-shadow:0 10px 24px rgba(255,92,173,0.35);}\n"
-      . ".admin-fab{bottom:70px;background:#3b2d72;box-shadow:0 10px 24px rgba(59,45,114,0.35);}\n"
-      . ".remix-fab{bottom:20px;background:#ff5cad;}\n"
-      . ".admin-fab:hover,.remix-fab:hover{transform:translateY(-2px);}\n"
+      . ".nav-fab{background:#1f6fff;box-shadow:0 10px 24px rgba(31,111,255,0.35);}\n"
+      . ".nav-fab[data-app-fab]{bottom:140px;}\n"
+      . ".nav-fab[data-projects-fab]{bottom:190px;}\n"
+      . ".admin-fab{bottom:90px;background:#3b2d72;box-shadow:0 10px 24px rgba(59,45,114,0.35);}\n"
+      . ".remix-fab{bottom:40px;background:#ff5cad;}\n"
+      . ".nav-fab:hover,.admin-fab:hover,.remix-fab:hover{transform:translateY(-2px);}\n"
       . "</style>\n";
     $items = new RecursiveIteratorIterator(
         new RecursiveDirectoryIterator($projectDir, FilesystemIterator::SKIP_DOTS)

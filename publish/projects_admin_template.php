@@ -73,7 +73,9 @@ function writeIndex(string $jsonPath, string $htmlPath, array $projects): void {
 
 function buildIndexHtml(array $projects): string {
     $cards = "";
-    $adminButton = "<a class=\"admin-btn\" href=\"/projects/admin.php\">Admin</a>";
+    $adminButton = "<a class=\"admin-btn\" href=\"/projects/admin.php\">Admin</a>"
+        . "<a class=\"admin-btn outline\" href=\"/projects/index.html\">Projects</a>"
+        . "<a class=\"admin-btn outline\" href=\"https://glitchlet.digitaldavidson.net/\">App</a>";
     foreach ($projects as $project) {
         if (!empty($project["archived"])) {
             continue;
@@ -104,9 +106,10 @@ function buildIndexHtml(array $projects): string {
         . "<style>"
         . "body{margin:0;font-family:Arial,sans-serif;background:#f6f6fb;color:#1b1736;}"
         . ".wrap{max-width:960px;margin:0 auto;padding:32px 20px;}"
-        . "h1{margin:0 0 20px;font-size:28px;display:flex;align-items:center;gap:12px;}"
+        . "h1{margin:0 0 20px;font-size:28px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}"
         . ".admin-btn{font-size:12px;text-decoration:none;color:#fff;background:#3b2d72;"
         . "padding:6px 10px;border-radius:999px;}"
+        . ".admin-btn.outline{background:#fff;color:#3b2d72;border:1px solid #3b2d72;}"
         . ".grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));}"
         . ".card{background:#fff;border-radius:16px;padding:16px;box-shadow:0 12px 24px rgba(0,0,0,0.08);}"
         . ".card h2{margin:0 0 6px;font-size:18px;}"
@@ -272,7 +275,10 @@ echo "<!doctype html><html><head><meta charset=\"utf-8\" />"
     . "<style>"
     . "body{margin:0;font-family:Arial,sans-serif;background:#f6f6fb;color:#1b1736;}"
     . ".wrap{max-width:960px;margin:0 auto;padding:32px 20px;}"
-    . "h1{margin:0 0 20px;font-size:28px;}"
+    . "h1{margin:0 0 20px;font-size:28px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}"
+    . ".admin-btn{font-size:12px;text-decoration:none;color:#fff;background:#3b2d72;"
+    . "padding:6px 10px;border-radius:999px;}"
+    . ".admin-btn.outline{background:#fff;color:#3b2d72;border:1px solid #3b2d72;}"
     . ".row{display:grid;grid-template-columns:1fr auto auto;gap:16px;align-items:center;"
     . "background:#fff;padding:14px;border-radius:14px;box-shadow:0 10px 20px rgba(0,0,0,0.08);"
     . "margin-top:5px;}"
@@ -286,6 +292,6 @@ echo "<!doctype html><html><head><meta charset=\"utf-8\" />"
     . "button{padding:8px 14px;border-radius:999px;border:none;font-weight:600;cursor:pointer;}"
     . ".danger{background:#ffe9e6;color:#a01912;}"
     . "</style></head><body><div class=\"wrap\">"
-    . "<h1>Glitchlet Projects Admin</h1>"
+    . "<h1>Glitchlet Projects Admin {$adminButton}</h1>"
     . "<div class=\"grid\">{$rows}</div>"
     . "</div></body></html>";
