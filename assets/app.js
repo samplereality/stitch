@@ -48,6 +48,7 @@ const state = {
   files: new Map(),
   editorDocs: new Map(),
   binaryDoc: null,
+  emptyDoc: null,
   currentPath: null,
   previewUrls: [],
   saveTimer: null,
@@ -88,11 +89,30 @@ const elements = {
   projectTitleInput: document.getElementById("projectTitleInput"),
   projectCreatorInput: document.getElementById("projectCreatorInput"),
   projectDescriptionInput: document.getElementById("projectDescriptionInput"),
+  newProjectModal: document.getElementById("newProjectModal"),
+  closeNewProjectBtn: document.getElementById("closeNewProjectBtn"),
+  newProjectNameInput: document.getElementById("newProjectNameInput"),
+  includeStarterFilesInput: document.getElementById("includeStarterFilesInput"),
+  createProjectBtn: document.getElementById("createProjectBtn"),
   publishModal: document.getElementById("publishModal"),
   closePublishModalBtn: document.getElementById("closePublishModalBtn"),
   publishUrlText: document.getElementById("publishUrlText"),
+  publishPasswordBlock: document.getElementById("publishPasswordBlock"),
+  publishPasswordText: document.getElementById("publishPasswordText"),
+  copyPublishPasswordBtn: document.getElementById("copyPublishPasswordBtn"),
   copyPublishUrlBtn: document.getElementById("copyPublishUrlBtn"),
   openPublishUrlBtn: document.getElementById("openPublishUrlBtn"),
+  aboutBtn: document.getElementById("aboutBtn"),
+  aboutModal: document.getElementById("aboutModal"),
+  closeAboutBtn: document.getElementById("closeAboutBtn"),
+  dismissAboutBtn: document.getElementById("dismissAboutBtn"),
+  dialogModal: document.getElementById("dialogModal"),
+  dialogCloseBtn: document.getElementById("dialogCloseBtn"),
+  dialogTitle: document.getElementById("dialogTitle"),
+  dialogMessage: document.getElementById("dialogMessage"),
+  dialogInput: document.getElementById("dialogInput"),
+  dialogCancelBtn: document.getElementById("dialogCancelBtn"),
+  dialogOkBtn: document.getElementById("dialogOkBtn"),
   projectManagerBtn: document.getElementById("projectManagerBtn"),
   projectManagerPanel: document.getElementById("projectManagerPanel"),
   closeProjectManagerBtn: document.getElementById("closeProjectManagerBtn"),
@@ -102,6 +122,7 @@ const elements = {
   saveProjectAsBtn: document.getElementById("saveProjectAsBtn"),
   projectList: document.getElementById("projectList"),
   addFileBtn: document.getElementById("addFileBtn"),
+  addFolderBtn: document.getElementById("addFolderBtn"),
   uploadFileBtn: document.getElementById("uploadFileBtn"),
   refreshPreviewBtn: document.getElementById("refreshPreviewBtn"),
   zipInput: document.getElementById("zipInput"),
@@ -112,6 +133,69 @@ const elements = {
 
 let codeMirror = null;
 let lineWrappingEnabled = false;
+let dialogResolver = null;
+let dialogMode = "alert";
+
+function openDialog(options = {}) {
+  const {
+    title = "Notice",
+    message = "",
+    mode = "alert",
+    defaultValue = "",
+    okLabel = "OK",
+    cancelLabel = "Cancel",
+  } = options;
+  dialogMode = mode;
+  elements.dialogTitle.textContent = title;
+  elements.dialogMessage.textContent = message;
+  elements.dialogOkBtn.textContent = okLabel;
+  elements.dialogCancelBtn.textContent = cancelLabel;
+  if (mode === "prompt") {
+    elements.dialogInput.classList.remove("hidden");
+    elements.dialogInput.value = defaultValue;
+  } else {
+    elements.dialogInput.classList.add("hidden");
+    elements.dialogInput.value = "";
+  }
+  elements.dialogCancelBtn.classList.toggle("hidden", mode === "alert");
+  elements.dialogModal.classList.remove("hidden");
+  refreshIcons();
+  if (mode === "prompt") {
+    elements.dialogInput.focus();
+  } else {
+    elements.dialogOkBtn.focus();
+  }
+  return new Promise((resolve) => {
+    dialogResolver = resolve;
+  });
+}
+
+function closeDialog(result) {
+  elements.dialogModal.classList.add("hidden");
+  const resolve = dialogResolver;
+  dialogResolver = null;
+  if (resolve) {
+    resolve(result);
+  }
+}
+
+function showAlert(message, title = "Notice") {
+  return openDialog({ title, message, mode: "alert", okLabel: "OK" });
+}
+
+function showConfirm(message, title = "Confirm") {
+  return openDialog({ title, message, mode: "confirm", okLabel: "OK", cancelLabel: "Cancel" });
+}
+
+function showPrompt(message, defaultValue = "", title = "Input") {
+  return openDialog({ title, message, mode: "prompt", defaultValue, okLabel: "OK", cancelLabel: "Cancel" });
+}
+
+function dialogCancelResult() {
+  if (dialogMode === "prompt") return null;
+  if (dialogMode === "confirm") return false;
+  return true;
+}
 
 function refreshIcons() {
   if (window.lucide && typeof window.lucide.createIcons === "function") {
@@ -322,16 +406,14 @@ function setFile(file) {
 function renameFile(oldPath, newPath) {
   const normalized = normalizePath(newPath);
   if (!normalized) {
-    alert("Please enter a valid file name.");
-    return false;
+    return { ok: false, error: "Please enter a valid file name." };
   }
-  if (normalized === oldPath) return false;
+  if (normalized === oldPath) return { ok: false, error: "" };
   if (state.files.has(normalized)) {
-    alert("A file with that name already exists.");
-    return false;
+    return { ok: false, error: "A file with that name already exists." };
   }
   const file = getFile(oldPath);
-  if (!file) return false;
+  if (!file) return { ok: false, error: "File not found." };
   state.files.delete(oldPath);
   file.path = normalized;
   file.mime = fileMime(normalized);
@@ -346,7 +428,7 @@ function renameFile(oldPath, newPath) {
     elements.currentFileLabel.textContent = normalized;
     setEditorMode(normalized);
   }
-  return true;
+  return { ok: true };
 }
 
 function removeFile(path) {
@@ -366,45 +448,87 @@ function renderFileTree() {
     const item = document.createElement("div");
     item.className = "file-item";
     if (path === state.currentPath) item.classList.add("active");
+    const isFolder = isFolderEntry(path);
+    if (isFolder) item.classList.add("file-folder");
+    item.dataset.path = path;
 
     const label = document.createElement("span");
-    label.textContent = path;
+    const displayName = isFolder ? `${folderFromEntry(path)}/` : path;
+    label.textContent = displayName;
 
     const actions = document.createElement("div");
     actions.className = "file-item-actions";
-
-    const renameBtn = document.createElement("button");
-    renameBtn.className = "icon-btn";
-    renameBtn.innerHTML = "<i data-lucide=\"pencil\"></i>";
-    renameBtn.title = "Rename file";
-    renameBtn.addEventListener("click", (event) => {
-      event.stopPropagation();
-      const next = prompt("Rename file:", path);
-      if (!next) return;
-      if (renameFile(path, next)) {
+    if (!isFolder) {
+      const renameBtn = document.createElement("button");
+      renameBtn.className = "icon-btn";
+      renameBtn.innerHTML = "<i data-lucide=\"pencil\"></i>";
+      renameBtn.title = "Rename file";
+      renameBtn.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        const next = await showPrompt("Rename file:", path, "Rename file");
+        if (!next) return;
+        const result = renameFile(path, next);
+        if (!result.ok) {
+          if (result.error) await showAlert(result.error, "Rename failed");
+          return;
+        }
         renderFileTree();
         queueSave();
         queuePreview();
-      }
-    });
+      });
 
-    const removeBtn = document.createElement("button");
-    removeBtn.className = "icon-btn";
-    removeBtn.innerHTML = "<i data-lucide=\"trash-2\"></i>";
-    removeBtn.title = "Delete file";
-    removeBtn.addEventListener("click", (event) => {
-      event.stopPropagation();
-      if (confirm(`Delete ${path}?`)) {
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "icon-btn";
+      removeBtn.innerHTML = "<i data-lucide=\"trash-2\"></i>";
+      removeBtn.title = "Delete file";
+      removeBtn.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        const confirmed = await showConfirm(`Delete ${path}?`, "Delete file");
+        if (!confirmed) return;
         removeFile(path);
         renderFileTree();
         queueSave();
         queuePreview();
-      }
-    });
+      });
 
-    actions.append(renameBtn, removeBtn);
+      actions.append(renameBtn, removeBtn);
+    }
     item.append(label, actions);
-    item.addEventListener("click", () => openFile(path));
+    if (!isFolder) {
+      item.setAttribute("draggable", "true");
+      item.addEventListener("dragstart", (event) => {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", path);
+      });
+    } else {
+      item.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        item.classList.add("drag-over");
+        event.dataTransfer.dropEffect = "move";
+      });
+      item.addEventListener("dragleave", () => {
+        item.classList.remove("drag-over");
+      });
+      item.addEventListener("drop", async (event) => {
+        event.preventDefault();
+        item.classList.remove("drag-over");
+        const draggedPath = event.dataTransfer.getData("text/plain");
+        if (!draggedPath || draggedPath === path || isFolderEntry(draggedPath)) return;
+        const targetFolder = folderFromEntry(path);
+        const targetPath = `${targetFolder}/${basename(draggedPath)}`;
+        const result = renameFile(draggedPath, targetPath);
+        if (!result.ok) {
+          if (result.error) await showAlert(result.error, "Move file");
+          return;
+        }
+        renderFileTree();
+        queueSave();
+        queuePreview();
+      });
+    }
+    if (!isFolder) {
+      item.addEventListener("click", () => openFile(path));
+    }
     elements.fileTree.appendChild(item);
   }
   refreshIcons();
@@ -461,16 +585,16 @@ function updateCurrentFile(value) {
 async function prettifyCurrentFile() {
   const path = state.currentPath;
   if (!path) {
-    alert("Pick a file to format.");
+    await showAlert("Pick a file to format.", "Prettify");
     return;
   }
   const file = getFile(path);
   if (!file || file.kind === "binary") {
-    alert("This file type cannot be prettified.");
+    await showAlert("This file type cannot be prettified.", "Prettify");
     return;
   }
   if (!window.prettier || !window.prettierPlugins) {
-    alert("Prettier is still loading. Try again in a moment.");
+    await showAlert("Prettier is still loading. Try again in a moment.", "Prettify");
     return;
   }
   const ext = extname(path);
@@ -479,7 +603,7 @@ async function prettifyCurrentFile() {
   if (ext === "css") parser = "css";
   if (ext === "html" || ext === "htm") parser = "html";
   if (!parser) {
-    alert("Prettify supports HTML, CSS, and JavaScript files.");
+    await showAlert("Prettify supports HTML, CSS, and JavaScript files.", "Prettify");
     return;
   }
   try {
@@ -501,7 +625,7 @@ async function prettifyCurrentFile() {
     queuePreview();
   } catch (error) {
     console.error(error);
-    alert("Prettify failed. Check the console for details.");
+    await showAlert("Prettify failed. Check the console for details.", "Prettify");
   }
 }
 
@@ -699,7 +823,22 @@ function openFirstFile() {
     return;
   }
   const first = Array.from(state.files.keys()).sort()[0];
-  if (first) openFile(first);
+  if (first) {
+    openFile(first);
+    return;
+  }
+  state.currentPath = null;
+  elements.currentFileLabel.textContent = "Select a file";
+  elements.binaryNotice.classList.add("hidden");
+  setEditorReadOnly(false);
+  if (codeMirror) {
+    if (!state.emptyDoc) {
+      state.emptyDoc = new CodeMirror.Doc("", null);
+    }
+    codeMirror.swapDoc(state.emptyDoc);
+  } else {
+    setEditorValue("");
+  }
 }
 
 async function loadInitialProject() {
@@ -736,6 +875,28 @@ function addFile(path, data = "", kind = null) {
   queuePreview();
 }
 
+function addFolder(path) {
+  const normalized = normalizePath(path).replace(/\/$/, "");
+  if (!normalized) return false;
+  const marker = `${normalized}/.keep`;
+  if (state.files.has(marker)) return false;
+  addFile(marker, "", "text");
+  return true;
+}
+
+function isFolderEntry(path) {
+  return path.endsWith("/.keep");
+}
+
+function folderFromEntry(path) {
+  return path.replace(/\/\.keep$/, "");
+}
+
+function basename(path) {
+  const parts = path.split("/");
+  return parts[parts.length - 1] || path;
+}
+
 async function handleFileUpload(files) {
   for (const file of files) {
     const path = normalizePath(file.name);
@@ -761,6 +922,52 @@ async function ensureJSZip() {
   });
 }
 
+async function ensurePako() {
+  if (window.pako) return window.pako;
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js";
+    script.onload = () => resolve(window.pako);
+    script.onerror = () => reject(new Error("Failed to load Pako"));
+    document.head.appendChild(script);
+  });
+}
+
+async function ensureUntarSync() {
+  if (window.untar) return window.untar;
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/untar-sync@1.0.3/dist/untar.js";
+    script.onload = () => resolve(window.untar);
+    script.onerror = () => reject(new Error("Failed to load untar"));
+    document.head.appendChild(script);
+  });
+}
+
+function computeImportRootPrefix(paths) {
+  const candidates = paths.filter((path) => path.includes("/"));
+  if (!candidates.length) return "";
+  const firstSegment = candidates[0].split("/")[0];
+  if (!firstSegment) return "";
+  const allInSameRoot = candidates.every((path) => path.startsWith(`${firstSegment}/`));
+  if (!allInSameRoot) return "";
+  return `${firstSegment}/`;
+}
+
+function computeDirSet(paths) {
+  const dirs = new Set();
+  for (const path of paths) {
+    const parts = path.split("/");
+    if (parts.length < 2) continue;
+    let current = "";
+    for (let i = 0; i < parts.length - 1; i++) {
+      current = current ? `${current}/${parts[i]}` : parts[i];
+      dirs.add(current);
+    }
+  }
+  return dirs;
+}
+
 async function importZip(file) {
   try {
     const JSZip = await ensureJSZip();
@@ -778,17 +985,16 @@ async function importZip(file) {
       }
       fileEntries.push({ entry, path: normalized });
     }
-    const topLevelFolders = new Set(
-      fileEntries.map(({ path }) => path.split("/")[0]).filter(Boolean)
-    );
-    const hasSingleRoot = topLevelFolders.size === 1 &&
-      fileEntries.every(({ path }) => path.includes("/"));
-    const rootPrefix = hasSingleRoot ? `${Array.from(topLevelFolders)[0]}/` : "";
+    const paths = fileEntries.map(({ path }) => path);
+    const rootPrefix = computeImportRootPrefix(paths);
+    const dirSet = computeDirSet(paths);
 
     for (const item of fileEntries) {
       const entry = item.entry;
-      const normalized = rootPrefix ? item.path.replace(rootPrefix, "") : item.path;
-      if (!normalized || isHiddenPath(normalized)) {
+      const normalized = rootPrefix && item.path.startsWith(rootPrefix)
+        ? item.path.slice(rootPrefix.length)
+        : item.path;
+      if (!normalized || isHiddenPath(normalized) || dirSet.has(normalized)) {
         continue;
       }
       const kind = isTextFile(normalized) ? "text" : "binary";
@@ -806,7 +1012,61 @@ async function importZip(file) {
     queuePreview();
   } catch (error) {
     console.error(error);
-    alert("Import failed. Check the console for details.");
+    await showAlert("Import failed. Check the console for details.", "Import");
+  }
+}
+
+async function importTgz(file) {
+  try {
+    await ensurePako();
+    await ensureUntarSync();
+    state.files = new Map();
+    state.editorDocs = new Map();
+    const buffer = await file.arrayBuffer();
+    let tarBuffer = buffer;
+    try {
+      const inflated = window.pako.ungzip(new Uint8Array(buffer));
+      tarBuffer = inflated.buffer;
+    } catch (error) {
+      // If it's already a plain tar, pako will fail; fall back to raw buffer.
+    }
+    const files = window.untar(tarBuffer);
+    const fileEntries = [];
+    for (const entry of files) {
+      const rawName = entry.name || entry.filename || "";
+      const entryType = entry.type;
+      if (!rawName || entryType === "directory" || entryType === 5 || entryType === "5") continue;
+      const normalized = normalizePath(rawName);
+      if (!normalized || isHiddenPath(normalized)) continue;
+      fileEntries.push({ entry, path: normalized });
+    }
+    const paths = fileEntries.map(({ path }) => path);
+    const rootPrefix = computeImportRootPrefix(paths);
+    const dirSet = computeDirSet(paths);
+    for (const item of fileEntries) {
+      const normalized = rootPrefix && item.path.startsWith(rootPrefix)
+        ? item.path.slice(rootPrefix.length)
+        : item.path;
+      if (!normalized || isHiddenPath(normalized) || dirSet.has(normalized)) {
+        continue;
+      }
+      const kind = isTextFile(normalized) ? "text" : "binary";
+      const data = item.entry.buffer || item.entry.data || item.entry;
+      if (kind === "text") {
+        const text = new TextDecoder().decode(data);
+        setFile({ path: normalized, kind: "text", data: text, mime: fileMime(normalized) });
+      } else {
+        const arrayBuffer = data instanceof ArrayBuffer ? data : data.buffer;
+        setFile({ path: normalized, kind: "binary", data: arrayBuffer, mime: fileMime(normalized) });
+      }
+    }
+    renderFileTree();
+    openFirstFile();
+    queueSave();
+    queuePreview();
+  } catch (error) {
+    console.error(error);
+    await showAlert("Import failed. Check the console for details.", "Import");
   }
 }
 
@@ -836,7 +1096,7 @@ async function exportZip() {
     URL.revokeObjectURL(url);
   } catch (error) {
     console.error(error);
-    alert("Export failed. Check the console for details.");
+    await showAlert("Export failed. Check the console for details.", "Export");
   }
 }
 
@@ -867,21 +1127,20 @@ async function publishProject() {
     }
     if (data?.url) {
       setStatus("Published");
-      openPublishModal(data.url);
+      openPublishModal(data.url, data?.adminPassword || "");
     } else {
       setStatus("Published");
-      alert("Published! Check the projects directory for your site.");
+      await showAlert("Published! Check the projects directory for your site.", "Publish");
     }
   } catch (error) {
     console.error(error);
     setStatus("Publish failed", 2000);
-    alert("Publish failed. Check the console for details.");
+    await showAlert("Publish failed. Check the console for details.", "Publish");
   }
 }
 
-async function resetProject() {
-  if (!confirm("Start a new project? This will clear the current workspace.")) return;
-  const name = prompt("Name your project:", DEFAULT_PROJECT_NAME);
+async function resetProject(options = {}) {
+  const { name, includeStarter = true } = options;
   state.projectId = createProjectId();
   state.projectName = normalizeProjectName(name);
   state.projectDescription = "";
@@ -889,8 +1148,10 @@ async function resetProject() {
   localStorage.setItem(CURRENT_PROJECT_KEY, state.projectId);
   state.files = new Map();
   state.editorDocs = new Map();
-  const defaults = createDefaultFiles();
-  defaults.forEach((file) => setFile({ ...file }));
+  if (includeStarter) {
+    const defaults = createDefaultFiles();
+    defaults.forEach((file) => setFile({ ...file }));
+  }
   renderFileTree();
   openFirstFile();
   await dbSet(state.projectId, serializeProject());
@@ -977,7 +1238,7 @@ function setupEvents() {
     });
   }
 
-  elements.newProjectBtn.addEventListener("click", resetProject);
+  elements.newProjectBtn.addEventListener("click", openNewProjectModal);
   elements.importZipBtn.addEventListener("click", () => elements.zipInput.click());
   elements.exportZipBtn.addEventListener("click", exportZip);
   elements.publishBtn.addEventListener("click", publishProject);
@@ -993,10 +1254,55 @@ function setupEvents() {
       saveProjectMeta();
     }
   });
+  elements.createProjectBtn.addEventListener("click", createNewProjectFromModal);
+  elements.closeNewProjectBtn.addEventListener("click", closeNewProjectModal);
+  elements.newProjectModal.addEventListener("click", (event) => {
+    if (event.target.classList.contains("modal-backdrop")) {
+      closeNewProjectModal();
+    }
+  });
+  elements.newProjectNameInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      createNewProjectFromModal();
+    }
+  });
   elements.closePublishModalBtn.addEventListener("click", closePublishModal);
   elements.publishModal.addEventListener("click", (event) => {
     if (event.target.classList.contains("modal-backdrop")) {
       closePublishModal();
+    }
+  });
+  elements.aboutBtn.addEventListener("click", openAboutModal);
+  elements.closeAboutBtn.addEventListener("click", closeAboutModal);
+  elements.dismissAboutBtn.addEventListener("click", closeAboutModal);
+  elements.aboutModal.addEventListener("click", (event) => {
+    if (event.target.classList.contains("modal-backdrop")) {
+      closeAboutModal();
+    }
+  });
+  elements.dialogOkBtn.addEventListener("click", () => {
+    if (dialogMode === "prompt") {
+      closeDialog(elements.dialogInput.value);
+    } else {
+      closeDialog(true);
+    }
+  });
+  elements.dialogCancelBtn.addEventListener("click", () => {
+    closeDialog(dialogCancelResult());
+  });
+  elements.dialogCloseBtn.addEventListener("click", () => {
+    closeDialog(dialogCancelResult());
+  });
+  elements.dialogModal.addEventListener("click", (event) => {
+    if (event.target.classList.contains("modal-backdrop")) {
+      closeDialog(dialogCancelResult());
+    }
+  });
+  elements.dialogInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      closeDialog(elements.dialogInput.value);
     }
   });
   elements.copyPublishUrlBtn.addEventListener("click", async () => {
@@ -1007,9 +1313,22 @@ function setupEvents() {
       setStatus("Copied");
     } catch (error) {
       console.error(error);
-      alert("Copy failed. You can manually copy the URL.");
+      await showAlert("Copy failed. You can manually copy the URL.", "Copy URL");
     }
   });
+  if (elements.copyPublishPasswordBtn) {
+    elements.copyPublishPasswordBtn.addEventListener("click", async () => {
+      const password = elements.publishPasswordText.textContent.trim();
+      if (!password) return;
+      try {
+        await navigator.clipboard.writeText(password);
+        setStatus("Copied");
+      } catch (error) {
+        console.error(error);
+        await showAlert("Copy failed. You can manually copy the password.", "Copy password");
+      }
+    });
+  }
   elements.openPublishUrlBtn.addEventListener("click", () => {
     const url = elements.openPublishUrlBtn.dataset.url;
     if (url) {
@@ -1045,9 +1364,19 @@ function setupEvents() {
       renameProject();
     }
   });
-  elements.addFileBtn.addEventListener("click", () => {
-    const path = prompt("New file path (e.g. assets/main.css):");
+  elements.addFileBtn.addEventListener("click", async () => {
+    const path = await showPrompt("New file path (e.g. assets/main.css):", "", "Add file");
     if (path) addFile(path);
+  });
+  elements.addFolderBtn.addEventListener("click", async () => {
+    const path = await showPrompt("New folder name (e.g. assets):", "", "New folder");
+    if (!path) return;
+    if (!addFolder(path)) {
+      await showAlert("That folder already exists or is invalid.", "New folder");
+    } else {
+      renderFileTree();
+      queueSave();
+    }
   });
   elements.uploadFileBtn.addEventListener("click", () => elements.fileInput.click());
   elements.refreshPreviewBtn.addEventListener("click", renderPreview);
@@ -1057,14 +1386,61 @@ function setupEvents() {
 
   elements.zipInput.addEventListener("change", (event) => {
     const [file] = event.target.files || [];
-    if (file) importZip(file);
+    if (file) {
+      const name = file.name.toLowerCase();
+      if (name.endsWith(".tgz") || name.endsWith(".tar.gz")) {
+        importTgz(file);
+      } else {
+        importZip(file);
+      }
+    }
     event.target.value = "";
   });
 
-  elements.fileInput.addEventListener("change", (event) => {
+  elements.fileInput.addEventListener("change", async (event) => {
     const files = Array.from(event.target.files || []);
-    if (files.length) handleFileUpload(files);
+    if (!files.length) {
+      event.target.value = "";
+      return;
+    }
+    const compressed = files.find((file) => {
+      const name = file.name.toLowerCase();
+      return name.endsWith(".zip") || name.endsWith(".tgz") || name.endsWith(".tar.gz");
+    });
+    if (compressed) {
+      await showAlert("Use Import to add ZIP/TGZ archives.", "Upload files");
+      event.target.value = "";
+      return;
+    }
+    handleFileUpload(files);
     event.target.value = "";
+  });
+
+  elements.fileTree.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    elements.fileTree.classList.add("drag-root");
+  });
+  elements.fileTree.addEventListener("dragleave", (event) => {
+    if (event.target === elements.fileTree) {
+      elements.fileTree.classList.remove("drag-root");
+    }
+  });
+  elements.fileTree.addEventListener("drop", async (event) => {
+    event.preventDefault();
+    elements.fileTree.classList.remove("drag-root");
+    const draggedPath = event.dataTransfer.getData("text/plain");
+    if (!draggedPath || isFolderEntry(draggedPath)) return;
+    const targetPath = basename(draggedPath);
+    if (draggedPath === targetPath) return;
+    const result = renameFile(draggedPath, targetPath);
+    if (!result.ok) {
+      if (result.error) await showAlert(result.error, "Move file");
+      return;
+    }
+    renderFileTree();
+    queueSave();
+    queuePreview();
   });
 
   document.addEventListener("click", (event) => {
@@ -1157,9 +1533,39 @@ async function saveProjectMeta() {
   closeProjectMetaModal();
 }
 
-function openPublishModal(url) {
+function openNewProjectModal() {
+  elements.newProjectNameInput.value = state.projectName;
+  elements.includeStarterFilesInput.checked = true;
+  elements.newProjectModal.classList.remove("hidden");
+  refreshIcons();
+}
+
+function closeNewProjectModal() {
+  elements.newProjectModal.classList.add("hidden");
+}
+
+async function createNewProjectFromModal() {
+  const confirmed = await showConfirm(
+    "Start a new project? This will clear the current workspace.",
+    "New project"
+  );
+  if (!confirmed) return;
+  const name = elements.newProjectNameInput.value || DEFAULT_PROJECT_NAME;
+  const includeStarter = elements.includeStarterFilesInput.checked;
+  await resetProject({ name, includeStarter });
+  closeNewProjectModal();
+}
+
+function openPublishModal(url, adminPassword = "") {
   elements.publishUrlText.textContent = url;
   elements.openPublishUrlBtn.dataset.url = url;
+  if (adminPassword) {
+    elements.publishPasswordText.textContent = adminPassword;
+    elements.publishPasswordBlock.classList.remove("hidden");
+  } else {
+    elements.publishPasswordText.textContent = "";
+    elements.publishPasswordBlock.classList.add("hidden");
+  }
   elements.publishModal.classList.remove("hidden");
 }
 
@@ -1167,13 +1573,24 @@ function closePublishModal() {
   elements.publishModal.classList.add("hidden");
 }
 
+function openAboutModal() {
+  elements.aboutModal.classList.remove("hidden");
+  refreshIcons();
+}
+
+function closeAboutModal() {
+  elements.aboutModal.classList.add("hidden");
+}
+
 async function ensurePublishMetadata() {
   if (state.projectCreator && state.projectDescription) {
     return true;
   }
-  const creator = state.projectCreator || prompt("Creator name:", state.projectCreator);
+  const creator = state.projectCreator ||
+    await showPrompt("Creator name:", state.projectCreator, "Project details");
   if (creator === null) return false;
-  const description = state.projectDescription || prompt("Project description:", state.projectDescription);
+  const description = state.projectDescription ||
+    await showPrompt("Project description:", state.projectDescription, "Project details");
   if (description === null) return false;
   state.projectCreator = String(creator || "").trim();
   state.projectDescription = String(description || "").trim();
@@ -1270,7 +1687,7 @@ async function renameProjectById(projectId) {
   const project = await dbGet(projectId);
   if (!project) return;
   const currentName = normalizeProjectName(project.name);
-  const name = prompt("Rename project:", currentName);
+  const name = await showPrompt("Rename project:", currentName, "Rename project");
   if (!name) return;
   const updatedProject = { ...project, name: normalizeProjectName(name), updatedAt: Date.now() };
   await dbSet(projectId, updatedProject);
@@ -1281,7 +1698,8 @@ async function renameProjectById(projectId) {
 }
 
 async function deleteProjectById(projectId) {
-  if (!confirm("Delete this project? This cannot be undone.")) return;
+  const confirmed = await showConfirm("Delete this project? This cannot be undone.", "Delete project");
+  if (!confirmed) return;
   await dbDelete(projectId);
   renderProjectManager();
 }
@@ -1299,7 +1717,7 @@ async function saveCurrentProject() {
 }
 
 async function saveProjectAs() {
-  const name = prompt("Save project as:", state.projectName);
+  const name = await showPrompt("Save project as:", state.projectName, "Save project as");
   if (!name) return;
   state.projectId = createProjectId();
   state.projectName = normalizeProjectName(name);

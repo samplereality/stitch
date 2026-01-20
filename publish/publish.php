@@ -19,8 +19,10 @@ const PROJECT_URL_BASE = "https://glitchlet.digitaldavidson.net/projects/";
 const REMIX_ZIP_NAME = "remix.zip";
 const PROJECT_INDEX_JSON = "index.json";
 const PROJECT_INDEX_HTML = "index.html";
+const PROJECTS_ADMIN_PHP = "admin.php";
 const ADMIN_USER = "admin";
 const ADMIN_PASSWORD_HASH = '$2y$10$XhgH5ocb7EK3e48H3stI8eHiQjarNIVYMKNeOOGkCUYJdu2aWKvl6';
+const AUTH_STORE_PATH = __DIR__ . "/../private/project_auth.json";
 
 $adjectives = [
     "brave", "silent", "cosmic", "sunny", "misty", "electric", "gentle", "swift", "bright", "hidden",
@@ -48,6 +50,7 @@ $nouns = [
 $projectsRoot = dirname(__DIR__) . "/projects";
 $tempRoot = sys_get_temp_dir();
 $adminTemplatePath = __DIR__ . "/admin_template.php";
+$projectsAdminTemplatePath = __DIR__ . "/projects_admin_template.php";
 $blockedNames = [".htaccess", ".htpasswd", ".user.ini"];
 $blockedSegments = [".well-known"];
 $allowedExtensions = [
@@ -165,6 +168,55 @@ function sanitizeMeta(?string $value, int $maxLength = 140): string {
     return $trimmed;
 }
 
+function ensureAuthStoreDir(string $path): void {
+    $dir = dirname($path);
+    if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
+        fail("Failed to create auth storage.", 500);
+    }
+    if (!file_exists($path)) {
+        file_put_contents($path, json_encode([], JSON_PRETTY_PRINT));
+    }
+}
+
+function readAuthStore(string $path): array {
+    ensureAuthStoreDir($path);
+    $handle = fopen($path, "c+");
+    if ($handle === false) {
+        fail("Failed to read auth store.", 500);
+    }
+    flock($handle, LOCK_SH);
+    $contents = stream_get_contents($handle);
+    flock($handle, LOCK_UN);
+    fclose($handle);
+    $decoded = json_decode($contents ?: "[]", true);
+    return is_array($decoded) ? $decoded : [];
+}
+
+function writeAuthStore(string $path, array $data): void {
+    ensureAuthStoreDir($path);
+    $handle = fopen($path, "c+");
+    if ($handle === false) {
+        fail("Failed to write auth store.", 500);
+    }
+    flock($handle, LOCK_EX);
+    ftruncate($handle, 0);
+    rewind($handle);
+    fwrite($handle, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+    fflush($handle);
+    flock($handle, LOCK_UN);
+    fclose($handle);
+}
+
+function generateAdminPassword(int $length = 12): string {
+    $alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+    $chars = [];
+    $maxIndex = strlen($alphabet) - 1;
+    for ($i = 0; $i < $length; $i++) {
+        $chars[] = $alphabet[random_int(0, $maxIndex)];
+    }
+    return implode("", $chars);
+}
+
 function readIndex(string $path): array {
     if (!file_exists($path)) {
         return [];
@@ -178,19 +230,22 @@ function readIndex(string $path): array {
 }
 
 function writeIndex(string $jsonPath, string $htmlPath, array $projects): void {
-    $sorted = $projects;
-    usort($sorted, function (array $a, array $b): int {
-        return ($b["publishedAt"] ?? 0) <=> ($a["publishedAt"] ?? 0);
-    });
-    file_put_contents($jsonPath, json_encode($sorted, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-    $html = buildIndexHtml($sorted);
-    file_put_contents($htmlPath, $html);
+  $sorted = $projects;
+  usort($sorted, function (array $a, array $b): int {
+    return ($b["publishedAt"] ?? 0) <=> ($a["publishedAt"] ?? 0);
+  });
+  file_put_contents($jsonPath, json_encode($sorted, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+  $html = buildIndexHtml($sorted);
+  file_put_contents($htmlPath, $html);
 }
 
 function buildIndexHtml(array $projects): string {
-    $cards = "";
-    foreach ($projects as $project) {
-        $name = htmlspecialchars($project["name"] ?? "Untitled Project", ENT_QUOTES);
+  $cards = "";
+  foreach ($projects as $project) {
+    if (!empty($project["archived"])) {
+      continue;
+    }
+    $name = htmlspecialchars($project["name"] ?? "Untitled Project", ENT_QUOTES);
         $url = htmlspecialchars($project["url"] ?? "#", ENT_QUOTES);
         $slug = htmlspecialchars($project["slug"] ?? "", ENT_QUOTES);
         $description = htmlspecialchars($project["description"] ?? "", ENT_QUOTES);
@@ -312,11 +367,27 @@ function writeAdminDashboard(string $projectDir, string $templatePath): void {
         fail("Failed to read admin template.", 500);
     }
     $template = str_replace(
-        ["{{ADMIN_USER_LITERAL}}", "{{ADMIN_HASH_LITERAL}}"],
-        [var_export(ADMIN_USER, true), var_export(ADMIN_PASSWORD_HASH, true)],
+        ["{{AUTH_STORE_PATH_LITERAL}}"],
+        [var_export(AUTH_STORE_PATH, true)],
         $template
     );
     file_put_contents($projectDir . "/admin.php", $template);
+}
+
+function writeProjectsAdminDashboard(string $projectsRoot, string $templatePath): void {
+    if (!file_exists($templatePath)) {
+        fail("Missing projects admin template.", 500);
+    }
+    $template = file_get_contents($templatePath);
+    if ($template === false) {
+        fail("Failed to read projects admin template.", 500);
+    }
+    $template = str_replace(
+        ["{{ADMIN_USER_LITERAL}}", "{{ADMIN_HASH_LITERAL}}", "{{AUTH_STORE_PATH_LITERAL}}"],
+        [var_export(ADMIN_USER, true), var_export(ADMIN_PASSWORD_HASH, true), var_export(AUTH_STORE_PATH, true)],
+        $template
+    );
+    file_put_contents($projectsRoot . "/" . PROJECTS_ADMIN_PHP, $template);
 }
 
 if ($_SERVER["REQUEST_METHOD"] !== "POST") {
@@ -360,6 +431,7 @@ for ($i = 0; $i < $zip->numFiles; $i++) {
     $name = (string) $stat["name"];
     $normalized = validatePath($name, $blockedNames, $blockedSegments);
     $isDir = substr($normalized, -1) === "/";
+    $normalized = rtrim($normalized, "/");
     if ($isDir) {
         $entries[] = ["path" => rtrim($normalized, "/"), "dir" => true, "size" => 0, "index" => $i];
         continue;
@@ -417,6 +489,14 @@ injectRemixFab($destination);
 writeAdminDashboard($destination, $adminTemplatePath);
 createZipFromDir($destination, $destination . "/" . REMIX_ZIP_NAME, ["admin.php", "project.json", REMIX_ZIP_NAME]);
 
+$authStore = readAuthStore(AUTH_STORE_PATH);
+$adminPassword = generateAdminPassword();
+$authStore[$slug] = [
+    "hash" => password_hash($adminPassword, PASSWORD_DEFAULT),
+    "createdAt" => time(),
+];
+writeAuthStore(AUTH_STORE_PATH, $authStore);
+
 $projectName = sanitizeMeta($_POST["name"] ?? "", 120);
 if ($projectName === "") {
     $projectName = "Untitled Project";
@@ -430,6 +510,7 @@ $metadata = [
     "description" => $projectDescription,
     "author" => $projectCreator,
     "creator" => $projectCreator,
+    "archived" => false,
     "publishedAt" => time(),
     "updatedAt" => time(),
     "url" => PROJECT_URL_BASE . $slug . "/",
@@ -452,9 +533,11 @@ if (!$found) {
     $projects[] = $metadata;
 }
 writeIndex($indexJsonPath, $indexHtmlPath, $projects);
+writeProjectsAdminDashboard($projectsRoot, $projectsAdminTemplatePath);
 
 echo json_encode([
     "ok" => true,
     "slug" => $slug,
     "url" => PROJECT_URL_BASE . $slug . "/",
+    "adminPassword" => $adminPassword,
 ], JSON_UNESCAPED_SLASHES);

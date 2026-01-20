@@ -10,24 +10,14 @@ session_set_cookie_params([
 ]);
 session_start();
 
+$ADMIN_USER = {{ADMIN_USER_LITERAL}};
+$ADMIN_PASSWORD_HASH = {{ADMIN_HASH_LITERAL}};
 $AUTH_STORE_PATH = {{AUTH_STORE_PATH_LITERAL}};
 
 function fail(string $message, int $status = 400): void {
     http_response_code($status);
     echo $message;
     exit;
-}
-
-function readAuthStore(string $path): array {
-    if (!file_exists($path)) {
-        return [];
-    }
-    $raw = file_get_contents($path);
-    if ($raw === false) {
-        return [];
-    }
-    $decoded = json_decode($raw, true);
-    return is_array($decoded) ? $decoded : [];
 }
 
 function readIndex(string $path): array {
@@ -42,6 +32,36 @@ function readIndex(string $path): array {
     return is_array($decoded) ? $decoded : [];
 }
 
+function readAuthStore(string $path): array {
+    if (!file_exists($path)) {
+        return [];
+    }
+    $raw = file_get_contents($path);
+    if ($raw === false) {
+        return [];
+    }
+    $decoded = json_decode($raw, true);
+    return is_array($decoded) ? $decoded : [];
+}
+
+function writeAuthStore(string $path, array $data): void {
+    $dir = dirname($path);
+    if (!is_dir($dir)) {
+        mkdir($dir, 0755, true);
+    }
+    file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+}
+
+function generateAdminPassword(int $length = 12): string {
+    $alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+    $chars = [];
+    $maxIndex = strlen($alphabet) - 1;
+    for ($i = 0; $i < $length; $i++) {
+        $chars[] = $alphabet[random_int(0, $maxIndex)];
+    }
+    return implode("", $chars);
+}
+
 function writeIndex(string $jsonPath, string $htmlPath, array $projects): void {
     $sorted = $projects;
     usort($sorted, function (array $a, array $b): int {
@@ -54,6 +74,9 @@ function writeIndex(string $jsonPath, string $htmlPath, array $projects): void {
 function buildIndexHtml(array $projects): string {
     $cards = "";
     foreach ($projects as $project) {
+        if (!empty($project["archived"])) {
+            continue;
+        }
         $name = htmlspecialchars($project["name"] ?? "Untitled Project", ENT_QUOTES);
         $url = htmlspecialchars($project["url"] ?? "#", ENT_QUOTES);
         $slug = htmlspecialchars($project["slug"] ?? "", ENT_QUOTES);
@@ -76,7 +99,7 @@ function buildIndexHtml(array $projects): string {
     return "<!doctype html>"
         . "<html lang=\"en\"><head><meta charset=\"utf-8\" />"
         . "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />"
-        . "<title>Published Projects</title>"
+        . "<title>Published Glitchlets</title>"
         . "<style>"
         . "body{margin:0;font-family:Arial,sans-serif;background:#f6f6fb;color:#1b1736;}"
         . ".wrap{max-width:960px;margin:0 auto;padding:32px 20px;}"
@@ -89,20 +112,19 @@ function buildIndexHtml(array $projects): string {
         . ".slug{font-size:11px;color:#8b87a7;}"
         . ".empty{color:#5b5875;}"
         . "</style></head><body><div class=\"wrap\">"
-        . "<h1>Published Projects</h1>"
+        . "<h1>Published Glitchlets</h1>"
         . "<div class=\"grid\">{$cards}</div>"
         . "</div></body></html>";
 }
 
-function ensureLoggedIn(string $authPath, string $slug): void {
+function ensureLoggedIn(string $user, string $hash): void {
     if (!empty($_SESSION["admin_auth"]) && $_SESSION["admin_auth"] === true) {
         return;
     }
     if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST["action"] ?? "") === "login") {
+        $inputUser = $_POST["username"] ?? "";
         $inputPass = $_POST["password"] ?? "";
-        $store = readAuthStore($authPath);
-        $hash = $store[$slug]["hash"] ?? "";
-        if ($hash && password_verify((string) $inputPass, $hash)) {
+        if (hash_equals($user, (string) $inputUser) && password_verify((string) $inputPass, $hash)) {
             $_SESSION["admin_auth"] = true;
             $_SESSION["csrf_token"] = bin2hex(random_bytes(16));
             header("Location: " . $_SERVER["REQUEST_URI"]);
@@ -112,7 +134,7 @@ function ensureLoggedIn(string $authPath, string $slug): void {
     }
     echo "<!doctype html><html><head><meta charset=\"utf-8\" />"
         . "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />"
-        . "<title>Project Admin</title>"
+        . "<title>Glitchlet Projects Admin</title>"
         . "<style>body{font-family:Arial,sans-serif;background:#f6f6fb;"
         . "display:grid;place-items:center;min-height:100vh;margin:0;}form{background:#fff;"
         . "padding:24px;border-radius:16px;box-shadow:0 12px 24px rgba(0,0,0,0.12);"
@@ -120,7 +142,7 @@ function ensureLoggedIn(string $authPath, string $slug): void {
         . "border:1px solid #ddd;}button{padding:10px;border-radius:999px;border:none;"
         . "background:#4b1cff;color:#fff;font-weight:600;}</style></head><body>"
         . "<form method=\"post\"><input type=\"hidden\" name=\"action\" value=\"login\" />"
-        . "<strong>Admin Login</strong>"
+        . "<strong>Admin Login</strong><input name=\"username\" placeholder=\"Username\" />"
         . "<input name=\"password\" type=\"password\" placeholder=\"Password\" />"
         . "<button type=\"submit\">Sign in</button></form></body></html>";
     exit;
@@ -141,13 +163,11 @@ function deleteDirectory(string $dir): void {
     @rmdir($dir);
 }
 
-$projectsRoot = dirname(__DIR__);
-$slug = basename(__DIR__);
+$projectsRoot = dirname(__DIR__) . "/projects";
 $indexJson = $projectsRoot . "/index.json";
 $indexHtml = $projectsRoot . "/index.html";
-$projectJson = __DIR__ . "/project.json";
 
-ensureLoggedIn($AUTH_STORE_PATH, $slug);
+ensureLoggedIn($ADMIN_USER, $ADMIN_PASSWORD_HASH);
 
 if (empty($_SESSION["csrf_token"])) {
     $_SESSION["csrf_token"] = bin2hex(random_bytes(16));
@@ -160,89 +180,109 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST["action"] ?? "") !== "login
     }
 }
 
-$index = readIndex($indexJson);
-$current = [
-    "slug" => $slug,
-    "name" => "Untitled Project",
-    "description" => "",
-    "author" => "",
-];
-if (file_exists($projectJson)) {
-    $raw = file_get_contents($projectJson);
-    $decoded = $raw ? json_decode($raw, true) : null;
-    if (is_array($decoded)) {
-        $current = array_merge($current, $decoded);
-    }
-}
+$projects = readIndex($indexJson);
+$authStore = readAuthStore($AUTH_STORE_PATH);
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $action = $_POST["action"] ?? "";
-    if ($action === "delete") {
-        $index = array_values(array_filter($index, function (array $project) use ($slug): bool {
-            return ($project["slug"] ?? "") !== $slug;
-        }));
-        writeIndex($indexJson, $indexHtml, $index);
-        deleteDirectory(__DIR__);
-        header("Location: /projects/index.html");
-        exit;
+    $slug = basename((string) ($_POST["slug"] ?? ""));
+    if ($slug === "") {
+        fail("Missing project slug.");
     }
-    if ($action === "update") {
-        $current["name"] = trim((string) ($_POST["name"] ?? $current["name"]));
-        $current["description"] = trim((string) ($_POST["description"] ?? ""));
-        $current["author"] = trim((string) ($_POST["author"] ?? ""));
-        $current["updatedAt"] = time();
-        file_put_contents($projectJson, json_encode($current, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-        $updated = false;
-        foreach ($index as $idx => $project) {
-            if (($project["slug"] ?? "") === $slug) {
-                $index[$idx] = array_merge($project, $current);
-                $updated = true;
-                break;
-            }
+    $found = false;
+    foreach ($projects as $idx => $project) {
+        if (($project["slug"] ?? "") !== $slug) {
+            continue;
         }
-        if (!$updated) {
-            $index[] = $current;
-        }
-        writeIndex($indexJson, $indexHtml, $index);
-        header("Location: " . $_SERVER["REQUEST_URI"]);
-        exit;
+        $found = true;
+    if ($action === "archive") {
+        $projects[$idx]["archived"] = true;
+    } elseif ($action === "restore") {
+        $projects[$idx]["archived"] = false;
+    } elseif ($action === "reset") {
+        $password = generateAdminPassword();
+        $authStore[$slug] = [
+            "hash" => password_hash($password, PASSWORD_DEFAULT),
+            "createdAt" => time(),
+        ];
+        $_SESSION["reset_password"] = ["slug" => $slug, "password" => $password];
+    } elseif ($action === "delete") {
+        array_splice($projects, $idx, 1);
+        deleteDirectory($projectsRoot . "/" . $slug);
+        unset($authStore[$slug]);
     }
+    break;
+  }
+    if (!$found) {
+        fail("Project not found.", 404);
+    }
+    writeIndex($indexJson, $indexHtml, $projects);
+    writeAuthStore($AUTH_STORE_PATH, $authStore);
+    header("Location: " . $_SERVER["REQUEST_URI"]);
+    exit;
 }
 
-$name = htmlspecialchars($current["name"] ?? "Untitled Project", ENT_QUOTES);
-$description = htmlspecialchars($current["description"] ?? "", ENT_QUOTES);
-$author = htmlspecialchars($current["author"] ?? "", ENT_QUOTES);
 $csrf = htmlspecialchars($_SESSION["csrf_token"], ENT_QUOTES);
+$resetInfo = $_SESSION["reset_password"] ?? null;
+if ($resetInfo) {
+    unset($_SESSION["reset_password"]);
+}
+$rows = "";
+foreach ($projects as $project) {
+    $slug = htmlspecialchars($project["slug"] ?? "", ENT_QUOTES);
+    $name = htmlspecialchars($project["name"] ?? "Untitled Project", ENT_QUOTES);
+    $url = htmlspecialchars($project["url"] ?? "#", ENT_QUOTES);
+    $creator = htmlspecialchars($project["author"] ?? ($project["creator"] ?? ""), ENT_QUOTES);
+    $description = htmlspecialchars($project["description"] ?? "", ENT_QUOTES);
+    $archived = !empty($project["archived"]);
+    $status = $archived ? "Archived" : "Live";
+    $toggleAction = $archived ? "restore" : "archive";
+    $toggleLabel = $archived ? "Restore" : "Archive";
+    $resetBanner = "";
+    if ($resetInfo && $resetInfo["slug"] === ($project["slug"] ?? "")) {
+        $safePass = htmlspecialchars($resetInfo["password"], ENT_QUOTES);
+        $resetBanner = "<div class=\"reset\">New password: <code>{$safePass}</code></div>";
+    }
+    $rows .= "<div class=\"row\">"
+        . "<div class=\"meta\">"
+        . "<strong><a href=\"{$url}\" target=\"_blank\" rel=\"noopener\">{$name}</a></strong>"
+        . ($creator ? "<span>By {$creator}</span>" : "")
+        . ($description ? "<em>{$description}</em>" : "")
+        . "<span>{$slug}</span>"
+        . $resetBanner
+        . "</div>"
+        . "<div class=\"status\">{$status}</div>"
+        . "<form method=\"post\"><input type=\"hidden\" name=\"csrf_token\" value=\"{$csrf}\" />"
+        . "<input type=\"hidden\" name=\"slug\" value=\"{$slug}\" />"
+        . "<button name=\"action\" value=\"{$toggleAction}\">{$toggleLabel}</button>"
+        . "<button name=\"action\" value=\"reset\">Reset password</button>"
+        . "<button name=\"action\" value=\"delete\" class=\"danger\" onclick=\"return confirm('Delete {$name}?');\">Delete</button>"
+        . "</form></div>";
+}
+if ($rows === "") {
+    $rows = "<p class=\"empty\">No projects found.</p>";
+}
 
 echo "<!doctype html><html><head><meta charset=\"utf-8\" />"
     . "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />"
-    . "<title>Project Admin</title>"
-    . "<style>body{font-family:Arial,sans-serif;background:#f6f6fb;margin:0;padding:32px;}"
-    . ".card{max-width:720px;margin:0 auto;background:#fff;padding:24px;border-radius:18px;"
-    . "box-shadow:0 16px 32px rgba(0,0,0,0.12);}label{font-size:12px;color:#555;"
-    . "text-transform:uppercase;letter-spacing:0.08em;font-weight:700;}"
-    . "input,textarea{width:100%;padding:10px;border-radius:10px;border:1px solid #ddd;"
-    . "font-size:14px;}textarea{min-height:120px;resize:vertical;}"
-    . "button{padding:10px 18px;border-radius:999px;border:none;font-weight:600;}"
-    . ".primary{background:#4b1cff;color:#fff;}"
+    . "<title>Glitchlet Project Admin</title>"
+    . "<style>"
+    . "body{margin:0;font-family:Arial,sans-serif;background:#f6f6fb;color:#1b1736;}"
+    . ".wrap{max-width:960px;margin:0 auto;padding:32px 20px;}"
+    . "h1{margin:0 0 20px;font-size:28px;}"
+    . ".row{display:grid;grid-template-columns:1fr auto auto;gap:16px;align-items:center;"
+    . "background:#fff;padding:14px;border-radius:14px;box-shadow:0 10px 20px rgba(0,0,0,0.08);"
+    . "margin-top:5px;}"
+    . ".meta{display:flex;flex-direction:column;gap:6px;}"
+    . ".meta span{font-size:12px;color:#777;}"
+    . ".meta em{font-size:12px;color:#555;font-style:normal;}"
+    . ".reset{margin-top:6px;font-size:12px;color:#3b2d72;}"
+    . ".reset code{background:#f1edff;padding:2px 6px;border-radius:6px;}"
+    . ".status{font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:#5b5875;}"
+    . "form{display:flex;gap:8px;}"
+    . "button{padding:8px 14px;border-radius:999px;border:none;font-weight:600;cursor:pointer;}"
     . ".danger{background:#ffe9e6;color:#a01912;}"
-    . ".row{display:grid;gap:12px;margin-top:16px;}"
-    . ".actions{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;}"
-    . "</style></head><body><div class=\"card\">"
-    . "<h1>Project Admin</h1>"
-    . "<form method=\"post\" class=\"row\">"
-    . "<input type=\"hidden\" name=\"csrf_token\" value=\"{$csrf}\" />"
-    . "<input type=\"hidden\" name=\"action\" value=\"update\" />"
-    . "<label>Project name</label>"
-    . "<input name=\"name\" value=\"{$name}\" />"
-    . "<label>Author</label>"
-    . "<input name=\"author\" value=\"{$author}\" />"
-    . "<label>Description</label>"
-    . "<textarea name=\"description\">{$description}</textarea>"
-    . "<div class=\"actions\"><button type=\"submit\" class=\"primary\">Save</button></div>"
-    . "</form>"
-    . "<form method=\"post\" onsubmit=\"return confirm('Delete this project?');\">"
-    . "<input type=\"hidden\" name=\"csrf_token\" value=\"{$csrf}\" />"
-    . "<input type=\"hidden\" name=\"action\" value=\"delete\" />"
-    . "<div class=\"actions\"><button type=\"submit\" class=\"danger\">Delete project</button></div>"
-    . "</form></div></body></html>";
+    . "</style></head><body><div class=\"wrap\">"
+    . "<h1>Glitchlet Projects Admin</h1>"
+    . "<div class=\"grid\">{$rows}</div>"
+    . "</div></body></html>";

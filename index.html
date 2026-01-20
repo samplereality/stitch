@@ -21,7 +21,12 @@
           <div class="brand-mark"></div>
           <div class="brand-text">
             <span class="brand-title">Glitchlet</span>
-            <span class="brand-subtitle">A Glitch-Like Tool for Creative Coding</span>
+            <span class="brand-subtitle">
+              A Glitch-Like Tool for Creative Coding
+              <button id="aboutBtn" class="icon-btn subtle-icon" title="About Glitchlet">
+                <i data-lucide="heart-handshake"></i>
+              </button>
+            </span>
           </div>
         </div>
         <div class="current-project">
@@ -82,6 +87,9 @@
             <div class="panel-actions">
               <button id="toggleFilePanelBtn" class="icon-btn" title="Collapse files">
                 <i data-lucide="chevrons-left"></i>
+              </button>
+              <button id="addFolderBtn" class="icon-btn" title="New folder">
+                <i data-lucide="folder-plus"></i>
               </button>
               <button id="addFileBtn" class="icon-btn" title="Add file">
                 <i data-lucide="file-plus"></i>
@@ -152,8 +160,31 @@
       </main>
     </div>
 
-    <input id="zipInput" type="file" accept=".zip" class="hidden" />
+    <input id="zipInput" type="file" accept=".zip,.tgz,.tar.gz" class="hidden" />
     <input id="fileInput" type="file" multiple class="hidden" />
+
+    <div id="newProjectModal" class="modal hidden" role="dialog" aria-label="New project">
+      <div class="modal-backdrop"></div>
+      <div class="modal-panel">
+        <div class="modal-header">
+          <span>New project</span>
+          <button id="closeNewProjectBtn" class="icon-btn" title="Close">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <label class="modal-label" for="newProjectNameInput">Project name</label>
+          <input id="newProjectNameInput" class="modal-input" type="text" placeholder="Project name" />
+          <label class="modal-label checkbox-row">
+            <input id="includeStarterFilesInput" type="checkbox" checked />
+            Include starter files
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button id="createProjectBtn" class="btn btn-primary">Create</button>
+        </div>
+      </div>
+    </div>
 
         <div id="projectMetaModal" class="modal hidden" role="dialog" aria-label="Project details">
           <div class="modal-backdrop"></div>
@@ -190,10 +221,62 @@
         <div class="modal-body">
           <p class="modal-text">Your project is live at:</p>
           <div class="modal-url" id="publishUrlText"></div>
+          <div id="publishPasswordBlock" class="modal-password hidden">
+            <p class="modal-text">Admin password (copy now):</p>
+            <div class="modal-url" id="publishPasswordText"></div>
+            <button id="copyPublishPasswordBtn" class="btn">Copy password</button>
+          </div>
         </div>
         <div class="modal-actions">
           <button id="copyPublishUrlBtn" class="btn">Copy URL</button>
           <button id="openPublishUrlBtn" class="btn btn-primary">Open</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="dialogModal" class="modal hidden" role="dialog" aria-label="Dialog">
+      <div class="modal-backdrop"></div>
+      <div class="modal-panel">
+        <div class="modal-header">
+          <span id="dialogTitle">Notice</span>
+          <button id="dialogCloseBtn" class="icon-btn" title="Close">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p id="dialogMessage" class="modal-text"></p>
+          <input id="dialogInput" class="modal-input hidden" type="text" />
+        </div>
+        <div class="modal-actions">
+          <button id="dialogCancelBtn" class="btn">Cancel</button>
+          <button id="dialogOkBtn" class="btn btn-primary">OK</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="aboutModal" class="modal hidden" role="dialog" aria-label="About Glitchlet">
+      <div class="modal-backdrop"></div>
+      <div class="modal-panel">
+        <div class="modal-header">
+          <span>About Glitchlet</span>
+          <button id="closeAboutBtn" class="icon-btn" title="Close">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-text">
+            Glitchlet is a lightweight, browser-based creative coding environment for building
+            small HTML/CSS/JS projects with instant preview.
+          </p>
+          <p class="modal-text">
+            Created by Mark Sample to help students and hobbyists publish and remix web projects.
+          </p>
+          <p class="modal-text">
+            Source: <a class="modal-link" href="https://github.com/samplereality/glitchlet/" target="_blank" rel="noopener">github.com/samplereality/glitchlet</a>
+          </p>
+        </div>
+        <div class="modal-actions">
+          <button id="dismissAboutBtn" class="btn btn-primary">Got it</button>
         </div>
       </div>
     </div>
