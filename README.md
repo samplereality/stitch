@@ -13,11 +13,30 @@ Glitchlet is a lightweight, browser-based creative-coding environment (HTML/CSS/
 
 Frontend editor scaffold is in place. Server-side publishing (through a PHP-endpoint) also works.
 
-## Getting started
+## Getting started (shared hosting)
 
-Option A: open `index.html` directly in your browser.
+These instructions assume a typical shared host (e.g., Reclaim Hosting) with PHP enabled.
 
-Option B (recommended): run a tiny local server to avoid browser file access quirks.
+1) Create a subdomain in your hosting control panel (e.g., `glitchlet.yoursite.net`).
+2) Upload the project files into the subdomain document root (e.g., `~/glitchlet.yoursite.net/`).
+3) Create a `/projects` directory inside that document root.
+4) Create a private folder **outside** the document root (e.g., `~/private/`) for per‑project admin passwords.
+5) Ensure PHP can write to `/projects` and the private folder.
+6) Edit `publish/publish.php`:
+   - Set `ADMIN_PASSWORD_HASH` to a real hash.
+   - Confirm `AUTH_STORE_PATH` points to the private folder (default: `../private/project_auth.json`).
+7) Confirm PHP is enabled for the `/publish` folder (a simple `test.php` should run).
+8) Open the app at your subdomain and publish a test project.
+
+To generate an admin hash:
+
+```sh
+php -r 'echo password_hash("your-strong-password-here", PASSWORD_DEFAULT), PHP_EOL;'
+```
+
+## Local development (optional)
+
+If you want to run it locally:
 
 ```sh
 python3 -m http.server
