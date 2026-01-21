@@ -2,6 +2,8 @@ const DB_NAME = "glitchlite-db";
 const STORE_NAME = "projects";
 const DEFAULT_PROJECT_ID = "default";
 const PUBLISH_ENDPOINT = "https://glitchlet.digitaldavidson.net/publish/publish.php";
+const PUBLISH_LOCKED_LABEL =
+  "Publishing is only for logged in users. Contact your Glitchlet admin to create an account.";
 const THEME_STORAGE_KEY = "stitch:theme";
 const EDITOR_THEME_KEY = "stitch:editor-theme";
 const LINE_WRAP_KEY = "stitch:line-wrap";
@@ -57,6 +59,7 @@ const state = {
   statusTimer: null,
   suppressEditorChange: false,
   isResizing: false,
+  authUser: null,
 };
 
 const elements = {
@@ -110,6 +113,20 @@ const elements = {
   aboutModal: document.getElementById("aboutModal"),
   closeAboutBtn: document.getElementById("closeAboutBtn"),
   dismissAboutBtn: document.getElementById("dismissAboutBtn"),
+  accountBtn: document.getElementById("accountBtn"),
+  accountModal: document.getElementById("accountModal"),
+  closeAccountModalBtn: document.getElementById("closeAccountModalBtn"),
+  loginPanel: document.getElementById("loginPanel"),
+  loginEmailInput: document.getElementById("loginEmailInput"),
+  loginPasswordInput: document.getElementById("loginPasswordInput"),
+  loginSubmitBtn: document.getElementById("loginSubmitBtn"),
+  loginError: document.getElementById("loginError"),
+  loginActions: document.getElementById("loginActions"),
+  accountPanel: document.getElementById("accountPanel"),
+  accountSummary: document.getElementById("accountSummary"),
+  accountProjectsLink: document.getElementById("accountProjectsLink"),
+  accountManagerLink: document.getElementById("accountManagerLink"),
+  logoutBtn: document.getElementById("logoutBtn"),
   dialogModal: document.getElementById("dialogModal"),
   dialogCloseBtn: document.getElementById("dialogCloseBtn"),
   dialogTitle: document.getElementById("dialogTitle"),
@@ -204,6 +221,128 @@ function dialogCancelResult() {
 function refreshIcons() {
   if (window.lucide && typeof window.lucide.createIcons === "function") {
     window.lucide.createIcons();
+  }
+}
+
+function setAuthUser(user) {
+  state.authUser = user;
+  updateAuthUI();
+}
+
+function updateAuthUI() {
+  const user = state.authUser;
+  const isAuthed = Boolean(user);
+  if (elements.accountBtn) {
+    if (!isAuthed) {
+      elements.accountBtn.textContent = "Guest";
+    } else if (user.role === "manager") {
+      elements.accountBtn.textContent = "Admin";
+    } else {
+      elements.accountBtn.textContent = "Editor";
+    }
+  }
+
+  if (elements.publishBtn) {
+    elements.publishBtn.classList.remove("btn-disabled");
+    elements.publishBtn.disabled = false;
+    elements.publishBtn.textContent = "Publish";
+    elements.publishBtn.title = "Publish";
+    elements.publishBtn.setAttribute("aria-disabled", "false");
+  }
+
+  if (elements.loginPanel && elements.accountPanel) {
+    elements.loginPanel.classList.toggle("hidden", isAuthed);
+    elements.accountPanel.classList.toggle("hidden", !isAuthed);
+  }
+  if (elements.loginActions) {
+    elements.loginActions.classList.toggle("hidden", isAuthed);
+  }
+  if (elements.accountSummary && user) {
+    elements.accountSummary.textContent = `${user.email} (${user.role})`;
+  }
+  if (elements.accountManagerLink) {
+    elements.accountManagerLink.classList.toggle("hidden", !user || user.role !== "manager");
+  }
+}
+
+async function fetchSession() {
+  try {
+    const response = await fetch("/publish/session.php", { credentials: "include" });
+    const data = await response.json();
+    setAuthUser(data?.user || null);
+  } catch (error) {
+    console.error(error);
+    setAuthUser(null);
+  }
+}
+
+function openAccountModal() {
+  if (!elements.accountModal) return;
+  updateAuthUI();
+  if (elements.loginError) elements.loginError.textContent = "";
+  elements.accountModal.classList.remove("hidden");
+  refreshIcons();
+  if (!state.authUser && elements.loginEmailInput) {
+    elements.loginEmailInput.focus();
+  }
+}
+
+function closeAccountModal() {
+  if (!elements.accountModal) return;
+  elements.accountModal.classList.add("hidden");
+}
+
+async function handleLoginSubmit() {
+  if (!elements.loginEmailInput || !elements.loginPasswordInput) return;
+  const email = elements.loginEmailInput.value.trim();
+  const password = elements.loginPasswordInput.value;
+  if (!email || !password) {
+    if (elements.loginError) {
+      elements.loginError.textContent = "Email and password required.";
+    }
+    return;
+  }
+  if (elements.loginSubmitBtn) {
+    elements.loginSubmitBtn.disabled = true;
+  }
+  try {
+    const response = await fetch("/publish/login.php", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data?.ok) {
+      throw new Error(data?.error || "Login failed.");
+    }
+    setAuthUser(data.user || null);
+    elements.loginPasswordInput.value = "";
+    closeAccountModal();
+    if (codeMirror) {
+      codeMirror.focus();
+    } else if (elements.editor) {
+      elements.editor.focus();
+    }
+  } catch (error) {
+    console.error(error);
+    if (elements.loginError) {
+      elements.loginError.textContent = "Login failed. Check your email or password.";
+    }
+  } finally {
+    if (elements.loginSubmitBtn) {
+      elements.loginSubmitBtn.disabled = false;
+    }
+  }
+}
+
+async function handleLogout() {
+  try {
+    await fetch("/publish/logout.php", { method: "POST", credentials: "include" });
+  } catch (error) {
+    console.error(error);
+  } finally {
+    setAuthUser(null);
   }
 }
 
@@ -435,6 +574,55 @@ function renameFile(oldPath, newPath) {
   return { ok: true };
 }
 
+function renameFolder(oldPath, newPath) {
+  const normalized = normalizePath(newPath).replace(/\/$/, "");
+  if (!normalized) {
+    return { ok: false, error: "Please enter a valid folder name." };
+  }
+  if (normalized === oldPath) return { ok: false, error: "" };
+  if (normalized.startsWith(`${oldPath}/`)) {
+    return { ok: false, error: "Folders cannot be moved inside themselves." };
+  }
+  const targetPrefix = `${oldPath}/`;
+  const toRename = Array.from(state.files.keys()).filter((path) => {
+    return path === `${oldPath}/.keep` || path.startsWith(targetPrefix);
+  });
+  if (!toRename.length) {
+    return { ok: false, error: "Folder not found." };
+  }
+  const renameSet = new Set(toRename);
+  for (const path of toRename) {
+    const nextPath = path === `${oldPath}/.keep`
+      ? `${normalized}/.keep`
+      : `${normalized}${path.slice(oldPath.length)}`;
+    if (state.files.has(nextPath) && !renameSet.has(nextPath)) {
+      return { ok: false, error: "A file or folder with that name already exists." };
+    }
+  }
+  for (const path of toRename) {
+    const nextPath = path === `${oldPath}/.keep`
+      ? `${normalized}/.keep`
+      : `${normalized}${path.slice(oldPath.length)}`;
+    const file = getFile(path);
+    if (!file) continue;
+    state.files.delete(path);
+    file.path = nextPath;
+    file.mime = fileMime(nextPath);
+    state.files.set(nextPath, file);
+    const doc = state.editorDocs.get(path);
+    if (doc) {
+      state.editorDocs.delete(path);
+      state.editorDocs.set(nextPath, doc);
+    }
+    if (state.currentPath === path) {
+      state.currentPath = nextPath;
+      elements.currentFileLabel.textContent = nextPath;
+      setEditorMode(nextPath);
+    }
+  }
+  return { ok: true };
+}
+
 function removeFile(path) {
   state.files.delete(path);
   state.editorDocs.delete(path);
@@ -496,6 +684,24 @@ function renderFileTree() {
         renderFileTree();
       });
 
+      const renameFolderBtn = document.createElement("button");
+      renameFolderBtn.className = "icon-btn";
+      renameFolderBtn.innerHTML = "<i data-lucide=\"pencil\"></i>";
+      renameFolderBtn.title = "Rename folder";
+      renameFolderBtn.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        const next = await showPrompt("Rename folder:", node.path, "Rename folder");
+        if (!next) return;
+        const result = renameFolder(node.path, next);
+        if (!result.ok) {
+          if (result.error) await showAlert(result.error, "Rename failed");
+          return;
+        }
+        renderFileTree();
+        queueSave();
+        queuePreview();
+      });
+
       const removeFolderBtn = document.createElement("button");
       removeFolderBtn.className = "icon-btn";
       removeFolderBtn.innerHTML = "<i data-lucide=\"trash-2\"></i>";
@@ -513,7 +719,7 @@ function renderFileTree() {
         queuePreview();
       });
 
-      actions.append(toggleBtn, removeFolderBtn);
+      actions.append(toggleBtn, renameFolderBtn, removeFolderBtn);
 
       item.addEventListener("dragover", (event) => {
         event.preventDefault();
@@ -1124,6 +1330,12 @@ function computeDirSet(paths) {
   return dirs;
 }
 
+function stripLeadingSlashUrls(content) {
+  return content
+    .replace(/(href|src)=([\"'])\/(?!\/)/gi, "$1=$2")
+    .replace(/url\((['"]?)\/(?!\/)/gi, "url($1");
+}
+
 async function importZip(file) {
   try {
     const JSZip = await ensureJSZip();
@@ -1156,7 +1368,8 @@ async function importZip(file) {
       const kind = isTextFile(normalized) ? "text" : "binary";
       if (kind === "text") {
         const content = await entry.async("string");
-        setFile({ path: normalized, kind: "text", data: content, mime: fileMime(normalized) });
+        const cleaned = stripLeadingSlashUrls(content);
+        setFile({ path: normalized, kind: "text", data: cleaned, mime: fileMime(normalized) });
       } else {
         const buffer = await entry.async("arraybuffer");
         setFile({ path: normalized, kind: "binary", data: buffer, mime: fileMime(normalized) });
@@ -1210,7 +1423,8 @@ async function importTgz(file) {
       const data = item.entry.buffer || item.entry.data || item.entry;
       if (kind === "text") {
         const text = new TextDecoder().decode(data);
-        setFile({ path: normalized, kind: "text", data: text, mime: fileMime(normalized) });
+        const cleaned = stripLeadingSlashUrls(text);
+        setFile({ path: normalized, kind: "text", data: cleaned, mime: fileMime(normalized) });
       } else {
         const arrayBuffer = data instanceof ArrayBuffer ? data : data.buffer;
         setFile({ path: normalized, kind: "binary", data: arrayBuffer, mime: fileMime(normalized) });
@@ -1261,6 +1475,11 @@ async function exportZip() {
 
 async function publishProject() {
   try {
+    if (!state.authUser) {
+      openAccountModal();
+      await showAlert(PUBLISH_LOCKED_LABEL, "Publish");
+      return;
+    }
     const hasMeta = await ensurePublishMetadata();
     if (!hasMeta) return;
     setStatus("Publishing...", 0);
@@ -1272,10 +1491,15 @@ async function publishProject() {
     form.append("description", state.projectDescription);
     const response = await fetch(PUBLISH_ENDPOINT, {
       method: "POST",
+      credentials: "include",
       body: form,
     });
     const raw = await response.text();
     if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        await fetchSession();
+        openAccountModal();
+      }
       throw new Error(raw || `Publish failed (${response.status})`);
     }
     let data = null;
@@ -1286,7 +1510,7 @@ async function publishProject() {
     }
     if (data?.url) {
       setStatus("Published");
-      openPublishModal(data.url, data?.adminPassword || "");
+      openPublishModal(data.url);
     } else {
       setStatus("Published");
       await showAlert("Published! Check the projects directory for your site.", "Publish");
@@ -1461,6 +1685,42 @@ function setupEvents() {
       closeAboutModal();
     }
   });
+  if (elements.accountBtn) {
+    elements.accountBtn.addEventListener("click", () => {
+      if (state.authUser && state.authUser.role === "manager") {
+        window.location.href = "/publish/manager.php";
+        return;
+      }
+      openAccountModal();
+    });
+  }
+  if (elements.closeAccountModalBtn) {
+    elements.closeAccountModalBtn.addEventListener("click", closeAccountModal);
+  }
+  if (elements.accountModal) {
+    elements.accountModal.addEventListener("click", (event) => {
+      if (event.target.classList.contains("modal-backdrop")) {
+        closeAccountModal();
+      }
+    });
+  }
+  if (elements.loginSubmitBtn) {
+    elements.loginSubmitBtn.addEventListener("click", handleLoginSubmit);
+  }
+  if (elements.loginPasswordInput) {
+    elements.loginPasswordInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        handleLoginSubmit();
+      }
+    });
+  }
+  if (elements.logoutBtn) {
+    elements.logoutBtn.addEventListener("click", async () => {
+      await handleLogout();
+      closeAccountModal();
+    });
+  }
   elements.dialogOkBtn.addEventListener("click", () => {
     if (dialogMode === "prompt") {
       closeDialog(elements.dialogInput.value);
@@ -1743,14 +2003,13 @@ async function createNewProjectFromModal() {
   closeNewProjectModal();
 }
 
-function openPublishModal(url, adminPassword = "") {
+function openPublishModal(url) {
   elements.publishUrlText.textContent = url;
   elements.openPublishUrlBtn.dataset.url = url;
-  if (adminPassword) {
-    elements.publishPasswordText.textContent = adminPassword;
-    elements.publishPasswordBlock.classList.remove("hidden");
-  } else {
+  if (elements.publishPasswordText) {
     elements.publishPasswordText.textContent = "";
+  }
+  if (elements.publishPasswordBlock) {
     elements.publishPasswordBlock.classList.add("hidden");
   }
   elements.publishModal.classList.remove("hidden");
@@ -2010,4 +2269,6 @@ applyStoredTheme();
 applyEditorTheme(localStorage.getItem(EDITOR_THEME_KEY));
 applyStoredLayout();
 setupEvents();
+setAuthUser(null);
+fetchSession();
 loadInitialProject();

@@ -706,6 +706,46 @@ a.btn {
   color: var(--muted);
 }
 
+#loginError {
+  color: #b00020;
+  font-weight: 600;
+}
+
+.login-spacer {
+  height: 10px;
+}
+
+#accountModal .modal-panel {
+  text-align: center;
+}
+
+#accountModal .modal-body {
+  align-items: center;
+  gap: 14px;
+}
+
+#accountModal .modal-actions {
+  justify-content: center;
+}
+
+#accountModal .modal-input {
+  width: min(320px, 100%);
+}
+
+#accountModal .modal-label {
+  align-self: flex-start;
+  width: min(320px, 100%);
+}
+
+#loginPanel,
+#accountPanel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+
 .modal-url {
   font-family: var(--mono);
   font-size: 13px;

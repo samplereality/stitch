@@ -50,6 +50,7 @@
           <button id="themeToggleBtn" class="icon-btn" title="Switch theme mode">
             <i data-lucide="sun-moon"></i>
           </button>
+          <button id="accountBtn" class="btn" title="Account">Guest</button>
           <div class="project-manager">
             <button id="projectManagerBtn" class="btn" title="Open project manager">Project Manager</button>
             <div id="projectManagerPanel" class="manager-panel hidden" role="dialog" aria-label="Project manager">
@@ -84,7 +85,7 @@
               </div>
             </div>
           </div>
-          <a class="btn" href="https://glitchlet.digitaldavidson.net/projects/" target="_blank" rel="noopener">Published Projects</a>
+          <a class="btn" href="/projects/index.html" target="_blank" rel="noopener">Published Projects</a>
           <button id="publishBtn" class="btn btn-primary">Publish</button>
         </div>
       </header>
@@ -239,15 +240,46 @@
         <div class="modal-body">
           <p class="modal-text">Your project is live at:</p>
           <div class="modal-url" id="publishUrlText"></div>
-          <div id="publishPasswordBlock" class="modal-password hidden">
-            <p class="modal-text">Admin password for this project (copy now):</p>
-            <div class="modal-url" id="publishPasswordText"></div>
-            <button id="copyPublishPasswordBtn" class="btn">Copy password</button>
-          </div>
         </div>
         <div class="modal-actions">
           <button id="copyPublishUrlBtn" class="btn">Copy URL</button>
           <button id="openPublishUrlBtn" class="btn btn-primary">Open</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="accountModal" class="modal hidden" role="dialog" aria-label="Account">
+      <div class="modal-backdrop"></div>
+      <div class="modal-panel">
+        <div class="modal-header">
+          <span>Account</span>
+          <button id="closeAccountModalBtn" class="icon-btn" title="Close">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div id="loginPanel">
+            <label class="modal-label" for="loginEmailInput">Email</label>
+            <input id="loginEmailInput" class="modal-input" type="email" placeholder="you@example.com" />
+            <div class="login-spacer"></div>
+            <label class="modal-label" for="loginPasswordInput">Password</label>
+            <input id="loginPasswordInput" class="modal-input" type="password" placeholder="Password" />
+            <p id="loginError" class="modal-text"></p>
+            <p class="modal-text">
+              Need an account? Contact your Glitchlet admin.
+            </p>
+          </div>
+          <div id="accountPanel" class="hidden">
+            <p class="modal-text" id="accountSummary"></p>
+            <div class="modal-actions">
+              <a id="accountProjectsLink" class="btn" href="/publish/projects.php">My projects</a>
+              <a id="accountManagerLink" class="btn hidden" href="/publish/manager.php">Admin</a>
+              <button id="logoutBtn" class="btn">Log out</button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions" id="loginActions">
+          <button id="loginSubmitBtn" class="btn btn-primary">Sign in</button>
         </div>
       </div>
     </div>

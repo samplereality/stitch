@@ -1,128 +1,26 @@
 <?php
 declare(strict_types=1);
 
-session_set_cookie_params([
-    "lifetime" => 0,
-    "path" => "/",
-    "secure" => !empty($_SERVER["HTTPS"]),
-    "httponly" => true,
-    "samesite" => "Strict",
-]);
-session_start();
+$publishRoot = dirname(__DIR__) . "/../publish";
+require_once $publishRoot . "/auth.php";
+require_once $publishRoot . "/projects_helpers.php";
 
-$AUTH_STORE_PATH = {{AUTH_STORE_PATH_LITERAL}};
+$user = requireLogin();
+$pdo = db();
+$slug = basename(__DIR__);
 
-function fail(string $message, int $status = 400): void {
-    http_response_code($status);
-    echo $message;
+$stmt = $pdo->prepare("SELECT * FROM projects WHERE slug = ? LIMIT 1");
+$stmt->execute([$slug]);
+$project = $stmt->fetch();
+if (!$project) {
+    http_response_code(404);
+    echo "Project not found.";
     exit;
 }
 
-function readAuthStore(string $path): array {
-    if (!file_exists($path)) {
-        return [];
-    }
-    $raw = file_get_contents($path);
-    if ($raw === false) {
-        return [];
-    }
-    $decoded = json_decode($raw, true);
-    return is_array($decoded) ? $decoded : [];
-}
-
-function readIndex(string $path): array {
-    if (!file_exists($path)) {
-        return [];
-    }
-    $raw = file_get_contents($path);
-    if ($raw === false) {
-        return [];
-    }
-    $decoded = json_decode($raw, true);
-    return is_array($decoded) ? $decoded : [];
-}
-
-function writeIndex(string $jsonPath, string $htmlPath, array $projects): void {
-    $sorted = $projects;
-    usort($sorted, function (array $a, array $b): int {
-        return ($b["publishedAt"] ?? 0) <=> ($a["publishedAt"] ?? 0);
-    });
-    file_put_contents($jsonPath, json_encode($sorted, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-    file_put_contents($htmlPath, buildIndexHtml($sorted));
-}
-
-function buildIndexHtml(array $projects): string {
-    $cards = "";
-    foreach ($projects as $project) {
-        $name = htmlspecialchars($project["name"] ?? "Untitled Project", ENT_QUOTES);
-        $url = htmlspecialchars($project["url"] ?? "#", ENT_QUOTES);
-        $slug = htmlspecialchars($project["slug"] ?? "", ENT_QUOTES);
-        $description = htmlspecialchars($project["description"] ?? "", ENT_QUOTES);
-        $author = htmlspecialchars($project["author"] ?? "", ENT_QUOTES);
-        $timestamp = isset($project["publishedAt"])
-            ? date("M j, Y", (int) $project["publishedAt"])
-            : "";
-        $meta = trim(($author ? "By " . $author : "") . ($timestamp ? " · " . $timestamp : ""), " ·");
-        $cards .= "<article class=\"card\">"
-            . "<h2><a href=\"{$url}\">{$name}</a></h2>"
-            . "<div class=\"meta\">{$meta}</div>"
-            . ($description ? "<p>{$description}</p>" : "")
-            . "<div class=\"slug\">{$slug}</div>"
-            . "</article>";
-    }
-    if ($cards === "") {
-        $cards = "<p class=\"empty\">No projects published yet.</p>";
-    }
-    return "<!doctype html>"
-        . "<html lang=\"en\"><head><meta charset=\"utf-8\" />"
-        . "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />"
-        . "<title>Published Projects</title>"
-        . "<style>"
-        . "body{margin:0;font-family:Arial,sans-serif;background:#f6f6fb;color:#1b1736;}"
-        . ".wrap{max-width:960px;margin:0 auto;padding:32px 20px;}"
-        . "h1{margin:0 0 20px;font-size:28px;}"
-        . ".grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));}"
-        . ".card{background:#fff;border-radius:16px;padding:16px;box-shadow:0 12px 24px rgba(0,0,0,0.08);}"
-        . ".card h2{margin:0 0 6px;font-size:18px;}"
-        . ".card a{text-decoration:none;color:#4b1cff;}"
-        . ".meta{font-size:12px;color:#5b5875;margin-bottom:8px;}"
-        . ".slug{font-size:11px;color:#8b87a7;}"
-        . ".empty{color:#5b5875;}"
-        . "</style></head><body><div class=\"wrap\">"
-        . "<h1>Published Projects</h1>"
-        . "<div class=\"grid\">{$cards}</div>"
-        . "</div></body></html>";
-}
-
-function ensureLoggedIn(string $authPath, string $slug): void {
-    if (!empty($_SESSION["admin_auth"]) && $_SESSION["admin_auth"] === true) {
-        return;
-    }
-    if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST["action"] ?? "") === "login") {
-        $inputPass = $_POST["password"] ?? "";
-        $store = readAuthStore($authPath);
-        $hash = $store[$slug]["hash"] ?? "";
-        if ($hash && password_verify((string) $inputPass, $hash)) {
-            $_SESSION["admin_auth"] = true;
-            $_SESSION["csrf_token"] = bin2hex(random_bytes(16));
-            header("Location: " . $_SERVER["REQUEST_URI"]);
-            exit;
-        }
-        fail("Login failed.", 403);
-    }
-    echo "<!doctype html><html><head><meta charset=\"utf-8\" />"
-        . "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />"
-        . "<title>Project Admin</title>"
-        . "<style>body{font-family:Arial,sans-serif;background:#f6f6fb;"
-        . "display:grid;place-items:center;min-height:100vh;margin:0;}form{background:#fff;"
-        . "padding:24px;border-radius:16px;box-shadow:0 12px 24px rgba(0,0,0,0.12);"
-        . "display:grid;gap:12px;min-width:280px;}input{padding:10px;border-radius:8px;"
-        . "border:1px solid #ddd;}button{padding:10px;border-radius:999px;border:none;"
-        . "background:#4b1cff;color:#fff;font-weight:600;}</style></head><body>"
-        . "<form method=\"post\"><input type=\"hidden\" name=\"action\" value=\"login\" />"
-        . "<strong>Admin Login</strong>"
-        . "<input name=\"password\" type=\"password\" placeholder=\"Password\" />"
-        . "<button type=\"submit\">Sign in</button></form></body></html>";
+if ($user["role"] !== "manager" && (int) $project["owner_user_id"] !== (int) $user["id"]) {
+    http_response_code(403);
+    echo "Forbidden.";
     exit;
 }
 
@@ -141,81 +39,53 @@ function deleteDirectory(string $dir): void {
     @rmdir($dir);
 }
 
-$projectsRoot = dirname(__DIR__);
-$slug = basename(__DIR__);
-$indexJson = $projectsRoot . "/index.json";
-$indexHtml = $projectsRoot . "/index.html";
-$projectJson = __DIR__ . "/project.json";
-
-ensureLoggedIn($AUTH_STORE_PATH, $slug);
-
 if (empty($_SESSION["csrf_token"])) {
     $_SESSION["csrf_token"] = bin2hex(random_bytes(16));
 }
 
-if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST["action"] ?? "") !== "login") {
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $token = $_POST["csrf_token"] ?? "";
     if (!hash_equals($_SESSION["csrf_token"], (string) $token)) {
-        fail("Invalid CSRF token.", 403);
+        http_response_code(403);
+        echo "Invalid CSRF token.";
+        exit;
     }
-}
-
-$index = readIndex($indexJson);
-$current = [
-    "slug" => $slug,
-    "name" => "Untitled Project",
-    "description" => "",
-    "author" => "",
-];
-if (file_exists($projectJson)) {
-    $raw = file_get_contents($projectJson);
-    $decoded = $raw ? json_decode($raw, true) : null;
-    if (is_array($decoded)) {
-        $current = array_merge($current, $decoded);
-    }
-}
-
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $action = $_POST["action"] ?? "";
     if ($action === "delete") {
-        $index = array_values(array_filter($index, function (array $project) use ($slug): bool {
-            return ($project["slug"] ?? "") !== $slug;
-        }));
-        writeIndex($indexJson, $indexHtml, $index);
+        $pdo->prepare("DELETE FROM projects WHERE slug = ?")->execute([$slug]);
         deleteDirectory(__DIR__);
+        writeProjectsIndex($pdo);
         header("Location: /projects/index.html");
         exit;
     }
     if ($action === "update") {
-        $current["name"] = trim((string) ($_POST["name"] ?? $current["name"]));
-        $current["description"] = trim((string) ($_POST["description"] ?? ""));
-        $current["author"] = trim((string) ($_POST["author"] ?? ""));
-        $current["updatedAt"] = time();
-        file_put_contents($projectJson, json_encode($current, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-        $updated = false;
-        foreach ($index as $idx => $project) {
-            if (($project["slug"] ?? "") === $slug) {
-                $index[$idx] = array_merge($project, $current);
-                $updated = true;
-                break;
-            }
-        }
-        if (!$updated) {
-            $index[] = $current;
-        }
-        writeIndex($indexJson, $indexHtml, $index);
+        $name = trim((string) ($_POST["name"] ?? $project["name"]));
+        $description = trim((string) ($_POST["description"] ?? ""));
+        $author = trim((string) ($_POST["author"] ?? ""));
+        $updatedAt = time();
+        $stmt = $pdo->prepare(
+            "UPDATE projects SET name = ?, description = ?, author = ?, creator = ?, updated_at = ? WHERE slug = ?"
+        );
+        $stmt->execute([$name, $description, $author, $author, $updatedAt, $slug]);
+        $project["name"] = $name;
+        $project["description"] = $description;
+        $project["author"] = $author;
+        $project["creator"] = $author;
+        $project["updated_at"] = $updatedAt;
+        writeProjectJson(__DIR__, $project);
+        writeProjectsIndex($pdo);
         header("Location: " . $_SERVER["REQUEST_URI"]);
         exit;
     }
 }
 
-$name = htmlspecialchars($current["name"] ?? "Untitled Project", ENT_QUOTES);
-$description = htmlspecialchars($current["description"] ?? "", ENT_QUOTES);
-$author = htmlspecialchars($current["author"] ?? "", ENT_QUOTES);
+$name = htmlspecialchars($project["name"] ?? "Untitled Project", ENT_QUOTES);
+$description = htmlspecialchars($project["description"] ?? "", ENT_QUOTES);
+$author = htmlspecialchars($project["author"] ?? "", ENT_QUOTES);
 $csrf = htmlspecialchars($_SESSION["csrf_token"], ENT_QUOTES);
-$projectUrl = htmlspecialchars(($current["url"] ?? ""), ENT_QUOTES);
+$projectUrl = htmlspecialchars(($project["url"] ?? ""), ENT_QUOTES);
 $projectsUrl = "/projects/index.html";
-$appUrl = "https://glitchlet.digitaldavidson.net/";
+$appUrl = APP_URL;
 
 echo "<!doctype html><html><head><meta charset=\"utf-8\" />"
     . "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />"
