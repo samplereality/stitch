@@ -68,6 +68,7 @@ Then visit `http://localhost:8000`.
 
 - ZIP import/export uses JSZip from a CDN by default. If you need fully offline hosting, download JSZip locally and update `ensureJSZip()` in `assets/app.js`.
 - Account emails use SMTP settings in `publish/config.php` (Gmail app passwords supported).
+- Keep `publish/config.php` private. It is ignored by git; do not commit SMTP or DB credentials.
 
 ## Roadmap
 
