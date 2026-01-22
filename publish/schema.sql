@@ -23,3 +23,14 @@ CREATE TABLE projects (
   INDEX(owner_user_id),
   CONSTRAINT fk_projects_owner FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+CREATE TABLE password_resets (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  token_hash CHAR(64) NOT NULL UNIQUE,
+  expires_at INT NOT NULL,
+  used_at INT DEFAULT NULL,
+  created_at INT NOT NULL,
+  INDEX(user_id),
+  CONSTRAINT fk_resets_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);

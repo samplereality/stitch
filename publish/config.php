@@ -21,3 +21,12 @@ define("DB_PORT", envValue("GLITCHLET_DB_PORT", "3306"));
 define("DB_NAME", envValue("GLITCHLET_DB_NAME", "digitald_glitchlet"));
 define("DB_USER", envValue("GLITCHLET_DB_USER", "digitald_glitchlet"));
 define("DB_PASS", envValue("GLITCHLET_DB_PASS", "HkU3PuNPo!QH2vU."));
+
+define("SMTP_ENABLED", envValue("GLITCHLET_SMTP_ENABLED", "1"));
+define("SMTP_HOST", envValue("GLITCHLET_SMTP_HOST", "smtp.gmail.com"));
+define("SMTP_PORT", envValue("GLITCHLET_SMTP_PORT", "587"));
+define("SMTP_USER", envValue("GLITCHLET_SMTP_USER", "samplereality@gmail.com"));
+define("SMTP_PASS", envValue("GLITCHLET_SMTP_PASS", "cqhu oygh venr rmdh"));
+define("SMTP_FROM", envValue("GLITCHLET_SMTP_FROM", "samplereality@gmail.com"));
+define("SMTP_FROM_NAME", envValue("GLITCHLET_SMTP_FROM_NAME", "Mark at Glitchlet"));
+define("SMTP_SECURE", envValue("GLITCHLET_SMTP_SECURE", "tls"));

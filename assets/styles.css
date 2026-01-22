@@ -740,10 +740,14 @@ a.btn {
 #loginPanel,
 #accountPanel {
   width: 100%;
-  display: flex;
   flex-direction: column;
   gap: 10px;
   align-items: center;
+}
+
+#loginPanel:not(.hidden),
+#accountPanel:not(.hidden) {
+  display: flex;
 }
 
 .modal-url {
