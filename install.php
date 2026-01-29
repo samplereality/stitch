@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 $lockPath = __DIR__ . "/install.lock";
 $configPath = __DIR__ . "/publish/config.php";
-$schemaPath = __DIR__ . "/publish/schema.sql";
+$schemaPath = __DIR__ . "/db/schema.sql";
 $projectsRoot = __DIR__ . "/projects";
 
 function baseUrl(): string {

@@ -26,12 +26,12 @@
 - `publish/publish.php` validates and extracts zip, generates word-based slug, injects Remix/Admin FABs, writes `project.json`.
 - Publishing requires a logged-in editor/manager account and records metadata in MySQL.
 
-## Accounts (new)
-- Publishing now requires a MySQL-backed account (editor or manager); guests can edit/preview only.
+## Accounts
+- Publishing requires a MySQL-backed account (editor or manager); guests can edit/preview only.
 - Manager creates editor accounts (single + bulk) and sends password-set links via SMTP.
 - Password reset links are stored in `password_resets` table; `/publish/reset.php` handles password set.
 - Manager console supports test emails, user deletion (optionally delete projects), and project sorting.
-- Project metadata now lives in MySQL (`publish/schema.sql`) with `publish/bootstrap.php` for first manager.
+- Project metadata now lives in MySQL (`db/schema.sql`) with `publish/bootstrap.php` for first manager.
 
 ## Admin dashboards
 - Per-project admin: `projects/{slug}/admin.php` (generated from `publish/admin_template.php`), uses account auth.
@@ -49,7 +49,7 @@
 - Create a subdomain doc root for the app (not necessarily `public_html`).
 - Create `/projects` inside the doc root.
 - Copy `publish/config.php.template` to `publish/config.php` and configure MySQL credentials or environment variables.
-- Run `publish/schema.sql` to create tables.
+- Run `db/schema.sql` to create tables.
 - Use `publish/bootstrap.php` (with `GLITCHLET_BOOTSTRAP_TOKEN`) to create the first manager.
 - Optional: use `/install.php` to write config, create `/projects`, run schema, and create manager (writes `install.lock`).
 

@@ -1,7 +1,7 @@
 const DB_NAME = "glitchlite-db";
 const STORE_NAME = "projects";
 const DEFAULT_PROJECT_ID = "default";
-const PUBLISH_ENDPOINT = "https://glitchlet.digitaldavidson.net/publish/publish.php";
+const PUBLISH_ENDPOINT = new URL("/publish/publish.php", window.location.origin).toString();
 const PUBLISH_LOCKED_LABEL =
   "Publishing is only for logged in users. Contact your Glitchlet admin to create an account.";
 const THEME_STORAGE_KEY = "stitch:theme";
