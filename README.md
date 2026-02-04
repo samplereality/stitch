@@ -43,6 +43,27 @@ These instructions assume a typical shared host (e.g., Reclaim Hosting) with PHP
 - Bump with `scripts/bump-version.sh`:
   - `scripts/bump-version.sh patch` (or `minor` / `major`)
   - `scripts/bump-version.sh 1.2.3` to set an explicit version.
+- Optional updater: configure `GLITCHLET_UPDATE_MANIFEST_URL` and `GLITCHLET_UPDATE_ALLOW=1` to enable `/publish/update.php`.
+
+### Update manifest format
+
+Create a JSON file (hosted anywhere public) that looks like this:
+
+```
+{
+  "version": "0.2.0",
+  "zip_url": "https://example.com/glitchlet/releases/glitchlet-0.2.0.zip",
+  "sha256": "optional-hex-sha256-checksum",
+  "notes": "Optional short release notes."
+}
+```
+
+### Release checklist (GitHub)
+
+1) Run `scripts/bump-version.sh` (patch/minor/major) and commit `VERSION` + `assets/version.js`.
+2) Push to GitHub.
+3) Create a GitHub release with tag `vX.Y.Z` and add notes.
+4) Upload (or use) the release ZIP and update your manifest `zip_url`, `version`, and optional `sha256`.
 
 ## Tutorial mode
 

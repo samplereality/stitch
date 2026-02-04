@@ -30,3 +30,6 @@ define("SMTP_PASS", envValue("GLITCHLET_SMTP_PASS", ""));
 define("SMTP_FROM", envValue("GLITCHLET_SMTP_FROM", ""));
 define("SMTP_FROM_NAME", envValue("GLITCHLET_SMTP_FROM_NAME", "Glitchlet"));
 define("SMTP_SECURE", envValue("GLITCHLET_SMTP_SECURE", "tls"));
+
+define("UPDATE_MANIFEST_URL", envValue("GLITCHLET_UPDATE_MANIFEST_URL", ""));
+define("UPDATE_ALLOW", envValue("GLITCHLET_UPDATE_ALLOW", "0"));

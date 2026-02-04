@@ -55,19 +55,63 @@ function normalizeEmails(string $raw): array {
     return array_values(array_unique($emails));
 }
 
+function inviteTemplatePath(): string {
+    return __DIR__ . "/invite_template.json";
+}
+
+function defaultInviteTemplate(): array {
+    return [
+        "subject" => "Set your Glitchlet password",
+        "body" => "Hello,\n\nYour Glitchlet account has been created. Set your password using this link:\n{link}\n\nIf you did not request this, you can ignore this email.\n\nThanks,\nGlitchlet",
+    ];
+}
+
+function loadInviteTemplate(): array {
+    $defaults = defaultInviteTemplate();
+    $path = inviteTemplatePath();
+    if (!file_exists($path)) {
+        return $defaults;
+    }
+    $raw = file_get_contents($path);
+    if ($raw === false) {
+        return $defaults;
+    }
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded)) {
+        return $defaults;
+    }
+    return array_merge($defaults, array_intersect_key($decoded, $defaults));
+}
+
+function saveInviteTemplate(string $subject, string $body): bool {
+    $payload = [
+        "subject" => $subject,
+        "body" => $body,
+    ];
+    return file_put_contents(inviteTemplatePath(), json_encode($payload, JSON_PRETTY_PRINT)) !== false;
+}
+
 function buildResetLink(string $token): string {
     return rtrim(APP_URL, "/") . "/publish/reset.php?token=" . $token;
 }
 
 function sendResetEmail(string $email, string $link, bool $isNew): bool {
-    $subject = $isNew ? "Set your Glitchlet password" : "Reset your Glitchlet password";
-    $body = "Hello,\n\n";
-    $body .= $isNew
-        ? "Your Glitchlet account has been created. Set your password using this link:\n"
-        : "Use this link to reset your Glitchlet password:\n";
-    $body .= $link . "\n\n";
-    $body .= "If you did not request this, you can ignore this email.\n";
-    $body .= "\nThanks,\nGlitchlet";
+    global $inviteTemplate;
+    if ($isNew) {
+        $subject = (string) ($inviteTemplate["subject"] ?? "Set your Glitchlet password");
+        $body = (string) ($inviteTemplate["body"] ?? "");
+        $body = str_replace(
+            ["{link}", "{app_url}", "{email}"],
+            [$link, rtrim(APP_URL, "/"), $email],
+            $body
+        );
+    } else {
+        $subject = "Reset your Glitchlet password";
+        $body = "Hello,\n\nUse this link to reset your Glitchlet password:\n";
+        $body .= $link . "\n\n";
+        $body .= "If you did not request this, you can ignore this email.\n";
+        $body .= "\nThanks,\nGlitchlet";
+    }
     return smtpSendMail($email, $subject, $body);
 }
 
@@ -76,6 +120,8 @@ function sendTestEmail(string $email): bool {
     $body = "This is a test email from Glitchlet.\n\nIf you received this, SMTP is working.";
     return smtpSendMail($email, $subject, $body);
 }
+
+$inviteTemplate = loadInviteTemplate();
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $action = $_POST["action"] ?? "";
@@ -167,6 +213,19 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 $error = smtpLastError();
                 $detail = $error ? " ({$error})" : "";
                 flash("Test email failed{$detail}. Check SMTP settings.");
+            }
+        }
+    } elseif ($action === "save_invite_template") {
+        $subject = trim((string) ($_POST["invite_subject"] ?? ""));
+        $body = trim((string) ($_POST["invite_body"] ?? ""));
+        if ($subject === "" || $body === "") {
+            flash("Invite subject and body are required.");
+        } else {
+            if (saveInviteTemplate($subject, $body)) {
+                $inviteTemplate = loadInviteTemplate();
+                flash("Invite email template updated.");
+            } else {
+                flash("Failed to update invite email template.");
             }
         }
     } elseif ($action === "delete_user") {
@@ -339,10 +398,14 @@ echo "<!doctype html><html><head><meta charset=\"utf-8\" />"
     . ".sort-row a{text-decoration:none;background:#fff;color:#3b2d72;border:1px solid #3b2d72;"
     . "padding:6px 10px;border-radius:999px;font-size:12px;}"
     . ".sort-row a.is-active{background:#3b2d72;color:#fff;}"
+    . ".toolbar button.secondary{background:#fff;color:#3b2d72;border:1px solid #3b2d72;}"
+    . ".note{font-size:12px;color:#5b5875;}"
     . "</style></head><body><div class=\"wrap\">"
     . "<div class=\"toolbar\">"
     . "<a class=\"outline\" href=\"" . APP_URL . "\">Glitchlet</a>"
     . "<a class=\"outline\" href=\"/projects/index.html\">Published projects</a>"
+    . "<button class=\"secondary\" id=\"checkUpdateBtn\" type=\"button\">Check updates</button>"
+    . "<button id=\"applyUpdateBtn\" type=\"button\" style=\"display:none;\">Apply update</button>"
     . "<form method=\"post\" action=\"/publish/logout.php\">"
     . "<input type=\"hidden\" name=\"redirect\" value=\"" . APP_URL . "\" />"
     . "<button type=\"submit\">Log out</button>"
@@ -361,6 +424,17 @@ echo "<!doctype html><html><head><meta charset=\"utf-8\" />"
     . "<input type=\"hidden\" name=\"action\" value=\"bulk_create\" />"
     . "<textarea name=\"emails\" placeholder=\"Paste emails separated by commas or new lines\"></textarea>"
     . "<button type=\"submit\">Create accounts</button>"
+    . "</form></section>"
+    . "<section class=\"panel\"><h2>Invite email template</h2>"
+    . "<form method=\"post\">"
+    . "<input type=\"hidden\" name=\"action\" value=\"save_invite_template\" />"
+    . "<input name=\"invite_subject\" type=\"text\" placeholder=\"Subject\" value=\""
+    . htmlspecialchars($inviteTemplate["subject"] ?? "", ENT_QUOTES) . "\" required />"
+    . "<textarea name=\"invite_body\" placeholder=\"Email body\" required>"
+    . htmlspecialchars($inviteTemplate["body"] ?? "", ENT_QUOTES)
+    . "</textarea>"
+    . "<div class=\"note\">Tokens: {link}, {app_url}, {email}</div>"
+    . "<button type=\"submit\">Save template</button>"
     . "</form></section>"
     . "<section class=\"panel\"><h2>Test email delivery</h2>"
     . "<form method=\"post\" id=\"testEmailForm\">"
@@ -382,4 +456,27 @@ echo "<!doctype html><html><head><meta charset=\"utf-8\" />"
     . "const testBtn=document.getElementById('testEmailBtn');"
     . "if(testForm&&testBtn){testForm.addEventListener('submit',()=>{"
     . "testBtn.disabled=true;testBtn.textContent='Sending...';});}"
+    . "const checkBtn=document.getElementById('checkUpdateBtn');"
+    . "const applyBtn=document.getElementById('applyUpdateBtn');"
+    . "const flash=(msg)=>{if(!msg)return;alert(msg);};"
+    . "if(checkBtn){checkBtn.addEventListener('click',async()=>{"
+    . "checkBtn.disabled=true;checkBtn.textContent='Checking...';"
+    . "try{const res=await fetch('/publish/update.php');"
+    . "const data=await res.json();"
+    . "if(!data.ok){flash(data.error||'Update check failed.');}"
+    . "else if(data.updateAvailable){"
+    . "flash('Update available: '+data.latest);"
+    . "if(applyBtn){applyBtn.style.display='inline-flex';applyBtn.dataset.latest=data.latest;}"
+    . "}else{flash('You are up to date.');}"
+    . "}catch(err){flash('Update check failed.');}"
+    . "finally{checkBtn.disabled=false;checkBtn.textContent='Check updates';}});}"
+    . "if(applyBtn){applyBtn.addEventListener('click',async()=>{"
+    . "const ok=confirm('Apply update now?');if(!ok)return;"
+    . "applyBtn.disabled=true;applyBtn.textContent='Updating...';"
+    . "try{const res=await fetch('/publish/update.php',{method:'POST'});"
+    . "const data=await res.json();"
+    . "if(!data.ok){flash(data.error||'Update failed.');}"
+    . "else{flash(data.message||'Update applied.');}"
+    . "}catch(err){flash('Update failed.');}"
+    . "finally{applyBtn.disabled=false;applyBtn.textContent='Apply update';}});}"
     . "</script></body></html>";
